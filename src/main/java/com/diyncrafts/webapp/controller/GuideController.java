@@ -5,8 +5,11 @@ package com.diyncrafts.webapp.controller;
 import com.diyncrafts.webapp.model.Guide;
 import com.diyncrafts.webapp.service.GuideService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -19,22 +22,43 @@ public class GuideController {
         this.guideService = guideService;
     }
 
-    @PostMapping
-    public ResponseEntity<Guide> createGuide(@RequestBody Guide guide) {
-        return ResponseEntity.ok(guideService.createGuide(guide));
+    @PostMapping(consumes = {"multipart/form-data"})
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<Guide> createGuide(
+            @RequestParam("title") String title,
+            @RequestParam("content") String content,
+            @RequestParam("videoId") String videoId,
+            @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
+        Guide guide = new Guide();
+        guide.setTitle(title);
+        guide.setContent(content);
+        guide.setVideoId(videoId);
+        return ResponseEntity.ok(guideService.createGuide(guide, imageFile));
     }
 
     @GetMapping("/video/{videoId}")
-    public ResponseEntity<List<Guide>> getGuidesByVideoId(@PathVariable String videoId) {
-        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId));
+    public ResponseEntity<List<Guide>> getGuidesByVideoId(
+            @PathVariable String videoId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, page, size));
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<Guide> updateGuide(@PathVariable Long id, @RequestBody Guide updatedGuide) {
-        return ResponseEntity.ok(guideService.updateGuide(id, updatedGuide));
+    @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<Guide> updateGuide(
+            @PathVariable Long id,
+            @RequestParam("title") String title,
+            @RequestParam("content") String content,
+            @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
+        Guide updatedGuide = new Guide();
+        updatedGuide.setTitle(title);
+        updatedGuide.setContent(content);
+        return ResponseEntity.ok(guideService.updateGuide(id, updatedGuide, imageFile));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Void> deleteGuide(@PathVariable Long id) {
         guideService.deleteGuide(id);
         return ResponseEntity.noContent().build();

@@ -3,6 +3,7 @@ package com.diyncrafts.webapp.model;
 import lombok.Data;
 import jakarta.persistence.*;
 
+
 @Data
 @Entity
 public class Guide {
