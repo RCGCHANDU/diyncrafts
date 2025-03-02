@@ -3,6 +3,7 @@ package com.diyncrafts.webapp.controller;
 import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.service.VideoService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +21,7 @@ public class VideoController {
     }
 
     @PostMapping("/upload")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Video> uploadVideo(@RequestParam("file") MultipartFile file,
                                              @RequestParam("title") String title,
                                              @RequestParam("description") String description,
@@ -34,11 +36,13 @@ public class VideoController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Video> getVideoById(@PathVariable Long id) {
         return ResponseEntity.ok(videoService.getVideoById(id));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Void> deleteVideo(@PathVariable Long id) {
         videoService.deleteVideo(id);
         return ResponseEntity.noContent().build();

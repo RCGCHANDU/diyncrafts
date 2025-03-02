@@ -24,4 +24,7 @@ public class Video {
 
     @Column(nullable = false)
     private String videoUrl; // URL of the video stored in AWS S3
+
+    @Column(nullable = false)
+    private Long userId; // ID of the user who uploaded the video
 }

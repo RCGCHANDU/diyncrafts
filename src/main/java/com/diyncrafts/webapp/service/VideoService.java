@@ -4,6 +4,7 @@ import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.repository.VideoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -52,14 +53,30 @@ public class VideoService {
     }
 
     public void deleteVideo(Long id) {
+        Video video = videoRepository.findById(id).orElseThrow(() -> new RuntimeException("Video not found"));
+
+        // Check if the current user is the owner or an admin
+        Long currentUserId = getCurrentUserId();
+        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"));
+
+        if (!isAdmin && !video.getUserId().equals(currentUserId)) {
+            throw new RuntimeException("You are not authorized to delete this video");
+        }
+
         videoRepository.deleteById(id);
     }
-
+    
     public List<Video> getVideosByCategory(String category) {
         return videoRepository.findByCategory(category);
     }
 
     public List<Video> getVideosByDifficultyLevel(String difficultyLevel) {
         return videoRepository.findByDifficultyLevel(difficultyLevel);
+    }
+
+    private Long getCurrentUserId() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return Long.parseLong(username); // Assuming username is the user ID
     }
 }
