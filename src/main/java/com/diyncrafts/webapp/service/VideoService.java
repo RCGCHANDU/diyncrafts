@@ -1,7 +1,10 @@
 package com.diyncrafts.webapp.service;
 
+import com.diyncrafts.webapp.model.Category;
 import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.repository.VideoRepository;
+import com.diyncrafts.webapp.repository.VideoSearchRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,12 +24,18 @@ public class VideoService {
     private VideoRepository videoRepository;
 
     @Autowired
+    private VideoSearchRepository videoSearchRepository;
+
+    @Autowired
     private S3Client s3Client;
 
     @Value("${aws.s3.bucketName}")
     private String bucketName;
 
-    public Video uploadVideo(MultipartFile file, String title, String description, String category, String difficultyLevel) throws IOException {
+    public Video uploadVideo(MultipartFile file, String title, String description, Long categoryId, String difficultyLevel) throws IOException {
+
+        // Get current user ID from Spring Security context
+        Long userId = getCurrentUserId();
         // Upload file to S3
         String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
         s3Client.putObject(PutObjectRequest.builder()
@@ -38,10 +47,25 @@ public class VideoService {
         Video video = new Video();
         video.setTitle(title);
         video.setDescription(description);
-        video.setCategory(category);
         video.setDifficultyLevel(difficultyLevel);
         video.setVideoUrl("https://" + bucketName + ".s3.amazonaws.com/" + fileName);
-        return videoRepository.save(video);
+
+        // Associate video with category
+        if (categoryId != null) {
+            Category category = new Category();
+            category.setId(categoryId);
+            video.setCategory(category);
+        }
+
+        // Set user ID
+        video.setUserId(userId);
+
+        Video savedVideo = videoRepository.save(video);
+
+        // Index video in Elasticsearch
+        videoSearchRepository.save(savedVideo);
+
+        return savedVideo;
     }
 
     public List<Video> getAllVideos() {
