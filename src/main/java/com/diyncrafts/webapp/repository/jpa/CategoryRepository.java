@@ -1,4 +1,4 @@
-package com.diyncrafts.webapp.repository;
+package com.diyncrafts.webapp.repository.jpa;
 
 import com.diyncrafts.webapp.model.Category;
 import org.springframework.data.jpa.repository.JpaRepository;

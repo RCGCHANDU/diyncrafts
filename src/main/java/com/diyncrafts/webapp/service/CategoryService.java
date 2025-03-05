@@ -1,7 +1,8 @@
 package com.diyncrafts.webapp.service;
 
 import com.diyncrafts.webapp.model.Category;
-import com.diyncrafts.webapp.repository.CategoryRepository;
+import com.diyncrafts.webapp.repository.jpa.CategoryRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

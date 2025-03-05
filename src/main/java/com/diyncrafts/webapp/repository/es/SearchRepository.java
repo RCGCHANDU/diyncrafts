@@ -1,12 +1,14 @@
-package com.diyncrafts.webapp.repository;
+package com.diyncrafts.webapp.repository.es;
 
 import java.util.List;
 
 import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
+import org.springframework.stereotype.Repository;
 
 import com.diyncrafts.webapp.model.Video;
 
-public interface VideoSearchRepository extends ElasticsearchRepository<Video, Long> {
+@Repository("searchElasticRepository")
+public interface SearchRepository extends ElasticsearchRepository<Video, Long> {
     List<Video> findByTitleContainingOrDescriptionContaining(String title, String description);
 
     List<Video> findByCategory(String category);

@@ -4,12 +4,14 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
 
 import com.diyncrafts.webapp.dto.LoginRequest;
 import com.diyncrafts.webapp.model.User;
-import com.diyncrafts.webapp.repository.UserRepository;
+import com.diyncrafts.webapp.repository.jpa.UserRepository;
 import com.diyncrafts.webapp.security.JwtTokenProvider;
 
+@Service
 public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;

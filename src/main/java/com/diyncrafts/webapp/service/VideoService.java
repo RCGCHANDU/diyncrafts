@@ -2,8 +2,8 @@ package com.diyncrafts.webapp.service;
 
 import com.diyncrafts.webapp.model.Category;
 import com.diyncrafts.webapp.model.Video;
-import com.diyncrafts.webapp.repository.VideoRepository;
-import com.diyncrafts.webapp.repository.VideoSearchRepository;
+import com.diyncrafts.webapp.repository.es.SearchRepository;
+import com.diyncrafts.webapp.repository.jpa.VideoRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +24,7 @@ public class VideoService {
     private VideoRepository videoRepository;
 
     @Autowired
-    private VideoSearchRepository videoSearchRepository;
+    private SearchRepository videoSearchRepository;
 
     @Autowired
     private S3Client s3Client;

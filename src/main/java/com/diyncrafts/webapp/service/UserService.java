@@ -5,7 +5,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.diyncrafts.webapp.model.User;
-import com.diyncrafts.webapp.repository.UserRepository;
+import com.diyncrafts.webapp.repository.jpa.UserRepository;
 
 @Service
 public class UserService {

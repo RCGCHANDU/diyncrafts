@@ -1,7 +1,7 @@
 package com.diyncrafts.webapp.service;
 
 import com.diyncrafts.webapp.model.Guide;
-import com.diyncrafts.webapp.repository.GuideRepository;
+import com.diyncrafts.webapp.repository.jpa.GuideRepository;
 
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
