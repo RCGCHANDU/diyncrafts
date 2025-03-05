@@ -3,6 +3,7 @@ package com.diyncrafts.webapp.model;
 import lombok.Data;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
@@ -47,7 +48,7 @@ public class Video {
     
     @NotNull(message = "User ID is required")
     @Column(nullable = false)
-    private Long userId; // ID of the user who uploaded the video
+    private UUID userId; // ID of the user who uploaded the video
 
     @Field(type = FieldType.Keyword)
     @ElementCollection // For storing a list of materials in the database

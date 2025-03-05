@@ -1,5 +1,6 @@
 package com.diyncrafts.webapp.service;
 
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import com.diyncrafts.webapp.dto.LoginRequest;
 import com.diyncrafts.webapp.model.User;
+import com.diyncrafts.webapp.model.User.ERole;
 import com.diyncrafts.webapp.repository.jpa.UserRepository;
 import com.diyncrafts.webapp.security.JwtTokenProvider;
 
@@ -31,6 +33,8 @@ public class AuthService {
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         userRepository.save(user);
+
+        user.setRole(ERole.valueOf(user.getRole().toString()));
         return "User registered sucessfully";
     }
 

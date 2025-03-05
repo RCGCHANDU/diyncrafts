@@ -57,9 +57,7 @@ public class VideoService {
             video.setCategory(category);
         }
 
-        // Set user ID
-        video.setUserId(userId);
-
+        
         Video savedVideo = videoRepository.save(video);
 
         // Index video in Elasticsearch
@@ -92,7 +90,7 @@ public class VideoService {
     }
     
     public List<Video> getVideosByCategory(String category) {
-        return videoRepository.findByCategory(category);
+        return videoRepository.findByCategoryName(category);
     }
 
     public List<Video> getVideosByDifficultyLevel(String difficultyLevel) {
