@@ -7,7 +7,6 @@ import com.diyncrafts.webapp.repository.jpa.VideoRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -16,6 +15,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
 import java.util.List;
+
 
 @Service
 public class VideoService {
@@ -34,8 +34,6 @@ public class VideoService {
 
     public Video uploadVideo(MultipartFile file, String title, String description, Long categoryId, String difficultyLevel) throws IOException {
 
-        // Get current user ID from Spring Security context
-        Long userId = getCurrentUserId();
         // Upload file to S3
         String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
         s3Client.putObject(PutObjectRequest.builder()
@@ -75,18 +73,11 @@ public class VideoService {
     }
 
     public void deleteVideo(Long id) {
-        Video video = videoRepository.findById(id).orElseThrow(() -> new RuntimeException("Video not found"));
-
-        // Check if the current user is the owner or an admin
-        Long currentUserId = getCurrentUserId();
-        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_ADMIN"));
-
-        if (!isAdmin && !video.getUserId().equals(currentUserId)) {
-            throw new RuntimeException("You are not authorized to delete this video");
+        if (videoRepository.existsById(id)) {
+            videoRepository.deleteById(id);
+        } else {
+            throw new RuntimeException("Video not exists");
         }
-
-        videoRepository.deleteById(id);
     }
     
     public List<Video> getVideosByCategory(String category) {
@@ -95,10 +86,5 @@ public class VideoService {
 
     public List<Video> getVideosByDifficultyLevel(String difficultyLevel) {
         return videoRepository.findByDifficultyLevel(difficultyLevel);
-    }
-
-    private Long getCurrentUserId() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return Long.parseLong(username); // Assuming username is the user ID
     }
 }

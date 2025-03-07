@@ -7,6 +7,7 @@ import java.util.UUID;
 
 @Data
 @Entity
+@Table(name = "user_account")
 public class User {
 
     @Id
@@ -25,6 +26,9 @@ public class User {
 
     @Column(nullable = false)
     private ERole role;
+
+    @Column(nullable = false) // Add the 'enabled' column to match the query.
+    private boolean enabled;  // Indicates if the user account is active
 
     public enum ERole {
         ROLE_USER, ROLE_ADMIN

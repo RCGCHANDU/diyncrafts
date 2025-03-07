@@ -20,9 +20,17 @@ public class UserService {
         return userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
     public User updateUserProfile(User updatedUser) {
         User currentUser = getCurrentUserProfile();
         currentUser.setEmail(updatedUser.getEmail());
         return userRepository.save(currentUser);
+    }
+
+    public boolean existsByUsername(String username) {
+        return userRepository.existsByUsername(username);
     }
 }
