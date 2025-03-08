@@ -21,13 +21,13 @@ public class ProfileController {
     }
 
     @GetMapping("/profile")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<?> getProfile() {
         return ResponseEntity.ok(userService.getCurrentUserProfile());
     }
 
     @PutMapping("/profile")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<?> updateProfile(@RequestBody User updatedUser) {
         return ResponseEntity.ok(userService.updateUserProfile(updatedUser));
     }

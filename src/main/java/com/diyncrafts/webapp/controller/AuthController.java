@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.diyncrafts.webapp.dto.LoginRequest;
 import com.diyncrafts.webapp.dto.RegisterRequest;
-import com.diyncrafts.webapp.model.User;
 import com.diyncrafts.webapp.service.AuthService;
 
 @RestController

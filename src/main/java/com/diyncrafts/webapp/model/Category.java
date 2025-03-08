@@ -4,7 +4,6 @@ import lombok.Data;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 
-import java.util.List;
 
 
 @Data
@@ -18,11 +17,4 @@ public class Category {
     private String name;
 
     private String description;
-
-    @ManyToOne
-    @JoinColumn(name = "parent_category_id")
-    private Category parentCategory; // Parent category for hierarchy
-
-    @OneToMany(mappedBy = "parentCategory", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Category> subcategories; // Subcategories
 }
