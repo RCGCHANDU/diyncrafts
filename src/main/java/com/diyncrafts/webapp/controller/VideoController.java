@@ -1,14 +1,15 @@
 package com.diyncrafts.webapp.controller;
 
+import com.diyncrafts.webapp.dto.VideoUploadRequest;
 import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.service.VideoService;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+
 
 import java.io.IOException;
 import java.util.List;
@@ -25,12 +26,8 @@ public class VideoController {
 
     @PostMapping("/upload")
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<Video> uploadVideo(@RequestParam("file") MultipartFile file,
-                                             @RequestParam("title") @NotBlank String title,
-                                             @RequestParam("description") @NotBlank String description,
-                                            @RequestParam(value = "categoryId", required = false) Long categoryId,
-                                             @RequestParam("difficultyLevel") @NotBlank String difficultyLevel) throws IOException {
-        return ResponseEntity.ok(videoService.uploadVideo(file, title, description, categoryId, difficultyLevel));
+    public ResponseEntity<Video> uploadVideo(@Valid @RequestBody VideoUploadRequest videoUploadRequest) throws IOException {
+        return ResponseEntity.ok(videoService.uploadVideo(videoUploadRequest));
     }
 
     @GetMapping

@@ -1,5 +1,6 @@
 package com.diyncrafts.webapp.service;
 
+import com.diyncrafts.webapp.dto.VideoUploadRequest;
 import com.diyncrafts.webapp.model.Category;
 import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.repository.es.SearchRepository;
@@ -12,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
 
 import java.io.IOException;
 import java.util.List;
@@ -32,8 +34,13 @@ public class VideoService {
     @Value("${aws.s3.bucketName}")
     private String bucketName;
 
-    public Video uploadVideo(MultipartFile file, String title, String description, Long categoryId, String difficultyLevel) throws IOException {
+    public Video uploadVideo(VideoUploadRequest videoUploadRequest) throws IOException {
 
+        MultipartFile file = videoUploadRequest.getFile();
+        String title = videoUploadRequest.getTitle();
+        String description = videoUploadRequest.getDescription();
+        Long categoryId = videoUploadRequest.getCategoryId();
+        String difficultyLevel = videoUploadRequest.getDifficultyLevel();
         // Upload file to S3
         String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
         s3Client.putObject(PutObjectRequest.builder()
