@@ -36,7 +36,7 @@ public class ElasticSearchConfig extends ElasticsearchConfiguration {
             return ClientConfiguration.builder()
                     .connectedTo("localhost:9200")
                     .usingSsl(sslContext)
-                    .withBasicAuth("elastic", "ZaJWOdHxCxx6w75qO*8e")
+                    .withBasicAuth("elastic", "dr3@mk1ng")
                     .build();
         } catch (NoSuchAlgorithmException | KeyStoreException | KeyManagementException e) {
             throw new RuntimeException("Failed to create SSL context", e);
