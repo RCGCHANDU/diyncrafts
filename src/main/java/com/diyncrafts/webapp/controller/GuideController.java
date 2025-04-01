@@ -23,7 +23,7 @@ public class GuideController {
     }
 
     @PostMapping(consumes = {"multipart/form-data"})
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> createGuide(
             @RequestParam("title") String title,
             @RequestParam("content") String content,
@@ -45,7 +45,7 @@ public class GuideController {
     }
 
     @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> updateGuide(
             @PathVariable Long id,
             @RequestParam("title") String title,
@@ -58,7 +58,7 @@ public class GuideController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Void> deleteGuide(@PathVariable Long id) {
         guideService.deleteGuide(id);
         return ResponseEntity.noContent().build();

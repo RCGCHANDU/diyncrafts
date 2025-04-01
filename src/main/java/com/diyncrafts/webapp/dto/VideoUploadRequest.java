@@ -18,6 +18,9 @@ public class VideoUploadRequest {
     @NotBlank(message = "Difficulty level is required")
     private String difficultyLevel;
 
+    private MultipartFile thumbnailFile; //Optional
+
+
     @NotNull(message = "File is required")
     private MultipartFile file;
 
@@ -59,6 +62,14 @@ public class VideoUploadRequest {
 
     public void setFile(MultipartFile file) {
         this.file = file;
+    }
+
+    public MultipartFile getThumbnailFile() {
+        return thumbnailFile;
+    }
+
+    public void setThumbnailFile(MultipartFile thumbnailFile) {
+        this.thumbnailFile = thumbnailFile;
     }
 
     // Getters and setters

@@ -3,12 +3,20 @@ package com.diyncrafts.webapp.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+
+import java.util.Collection;
+import java.util.Collections;
 import java.util.UUID;
+
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
 
 @Data
 @Entity
 @Table(name = "user_account")
-public class User {
+public class User implements UserDetails{
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -32,5 +40,10 @@ public class User {
 
     public enum ERole {
         ROLE_USER, ROLE_ADMIN
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return Collections.singletonList(new SimpleGrantedAuthority(role.name()));
     }
 }

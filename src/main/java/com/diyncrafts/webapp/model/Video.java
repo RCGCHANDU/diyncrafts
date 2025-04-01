@@ -2,6 +2,7 @@ package com.diyncrafts.webapp.model;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,6 +34,21 @@ public class Video {
     @Column(nullable = false)
     private String description;
 
+    @Field(type = FieldType.Keyword)
+    @NotBlank(message = "Thumbnail URL is required")
+    @Column(nullable = false)
+    private String thumbnailUrl;
+
+
+    @NotNull(message = "Upload date is required")
+    @Column(name = "upload_date", nullable = false)
+    private LocalDate uploadDate;
+
+
+    @NotNull(message = "View count is required")
+    @Column(name = "views", nullable = false)
+    private Integer viewCount;
+
     @ManyToOne
     @JoinColumn(name = "category_id")
     @Field(type = FieldType.Keyword)
@@ -46,9 +62,10 @@ public class Video {
     @Column(nullable = false)
     private String videoUrl; // URL of the video stored in AWS S3
     
-    @NotNull(message = "User ID is required")
-    @Column(nullable = false)
-    private UUID userId; // ID of the user who uploaded the video
+    private UUID userId; // Foreign key to User
+
+    @Column(name = "uploader_username", nullable = false)
+    private String uploader;
 
     @Field(type = FieldType.Keyword)
     @ElementCollection // For storing a list of materials in the database
