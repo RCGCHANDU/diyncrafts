@@ -4,9 +4,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
-import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
@@ -19,7 +17,6 @@ import jakarta.validation.constraints.NotNull;
 @Entity
 @Document(indexName = "videos")
 public class Video {
-    @jakarta.persistence.Id
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -39,19 +36,17 @@ public class Video {
     @Column(nullable = false)
     private String thumbnailUrl;
 
-
     @NotNull(message = "Upload date is required")
     @Column(name = "upload_date", nullable = false)
     private LocalDate uploadDate;
 
-
     @NotNull(message = "View count is required")
     @Column(name = "views", nullable = false)
-    private Integer viewCount;
+    private Long viewCount;
 
     @ManyToOne
-    @JoinColumn(name = "category_id")
-    @Field(type = FieldType.Keyword)
+    @JoinColumn(name = "category_id", nullable = true)
+    @Field(type = FieldType.Keyword) // Indexes category name via getter
     private Category category;
 
     @Field(type = FieldType.Keyword)
@@ -59,15 +54,26 @@ public class Video {
     @Column(nullable = false)
     private String difficultyLevel;
 
+    @NotBlank(message = "Video URL is required")
     @Column(nullable = false)
-    private String videoUrl; // URL of the video stored in AWS S3
-    
-    private UUID userId; // Foreign key to User
+    private String videoUrl;
 
-    @Column(name = "uploader_username", nullable = false)
-    private String uploader;
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user; 
 
+    @Field(type = FieldType.Keyword) // For Elasticsearch indexing
+    private String categoryName; 
+
+    @ElementCollection
+    @Column(name = "material")
+    @CollectionTable(name = "video_materials", joinColumns = @JoinColumn(name = "video_id"))
+    private List<String> materialsUsed;
+
+    // Add getter for category name for Elasticsearch indexing
+    @Transient
     @Field(type = FieldType.Keyword)
-    @ElementCollection // For storing a list of materials in the database
-    private List<String> materialsUsed; // List of materials used in the video
+    public String getCategoryName() {
+        return category != null ? category.getName() : null;
+    }
 }

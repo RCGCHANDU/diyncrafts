@@ -7,4 +7,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, Long> {
+    // Method name follows Spring Data JPA naming convention
+    Category findByName(String categoryName); // "name" is the field in Category
 }

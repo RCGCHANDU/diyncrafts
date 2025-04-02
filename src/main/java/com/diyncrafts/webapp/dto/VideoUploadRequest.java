@@ -13,41 +13,41 @@ public class VideoUploadRequest {
     @NotBlank(message = "Description is required")
     private String description;
 
-    private Long categoryId; // Optional
+    private String category; // Optional
 
+    
     @NotBlank(message = "Difficulty level is required")
     private String difficultyLevel;
-
+    
     private MultipartFile thumbnailFile; //Optional
-
-
+    
+    
     @NotNull(message = "File is required")
-    private MultipartFile file;
-
+    private MultipartFile videoFile;
+    
     public String getTitle() {
         return title;
     }
-
+    
     public void setTitle(String title) {
         this.title = title;
     }
-
+    
     public String getDescription() {
         return description;
     }
-
+    
     public void setDescription(String description) {
         this.description = description;
     }
-
-    public Long getCategoryId() {
-        return categoryId;
+    
+    public String getCategory() {
+        return category;
     }
-
-    public void setCategoryId(Long categoryId) {
-        this.categoryId = categoryId;
+    
+    public void setCategory(String category) {
+        this.category = category;
     }
-
     public String getDifficultyLevel() {
         return difficultyLevel;
     }
@@ -55,13 +55,13 @@ public class VideoUploadRequest {
     public void setDifficultyLevel(String difficultyLevel) {
         this.difficultyLevel = difficultyLevel;
     }
-
-    public MultipartFile getFile() {
-        return file;
+    
+    public MultipartFile getVideoFile() {
+        return videoFile;
     }
 
-    public void setFile(MultipartFile file) {
-        this.file = file;
+    public void setVideoFile(MultipartFile videoFile) {
+        this.videoFile = videoFile;
     }
 
     public MultipartFile getThumbnailFile() {

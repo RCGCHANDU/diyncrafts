@@ -1,7 +1,5 @@
 package com.diyncrafts.webapp.controller;
 
-
-
 import com.diyncrafts.webapp.model.Guide;
 import com.diyncrafts.webapp.service.GuideService;
 import org.springframework.http.ResponseEntity;
@@ -27,34 +25,29 @@ public class GuideController {
     public ResponseEntity<Guide> createGuide(
             @RequestParam("title") String title,
             @RequestParam("content") String content,
-            @RequestParam("videoId") String videoId,
+            @RequestParam("videoId") Long videoId,
             @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
-        Guide guide = new Guide();
-        guide.setTitle(title);
-        guide.setContent(content);
-        guide.setVideoId(videoId);
-        return ResponseEntity.ok(guideService.createGuide(guide, imageFile));
+        return ResponseEntity.ok(guideService.createGuide(title, content, videoId, imageFile));
     }
 
     @GetMapping("/video/{videoId}")
     public ResponseEntity<List<Guide>> getGuidesByVideoId(
-            @PathVariable String videoId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, page, size));
+        @PathVariable Long videoId,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "10") int limit) {
+        
+        int offset = (page - 1) * limit;
+        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, offset, limit));
     }
 
-    @PutMapping(value = "/{id}", consumes = {"multipart/form-data"})
+    @PutMapping("/{id}")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> updateGuide(
             @PathVariable Long id,
             @RequestParam("title") String title,
             @RequestParam("content") String content,
             @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
-        Guide updatedGuide = new Guide();
-        updatedGuide.setTitle(title);
-        updatedGuide.setContent(content);
-        return ResponseEntity.ok(guideService.updateGuide(id, updatedGuide, imageFile));
+        return ResponseEntity.ok(guideService.updateGuide(id, title, content, imageFile));
     }
 
     @DeleteMapping("/{id}")

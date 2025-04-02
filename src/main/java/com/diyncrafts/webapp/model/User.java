@@ -2,6 +2,7 @@ package com.diyncrafts.webapp.model;
 
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.Collection;
@@ -23,20 +24,24 @@ public class User implements UserDetails{
     @Column(updatable = false, nullable = false)
     private UUID id;
 
+    @NotBlank(message = "Username is required")
     @Column(unique = true, nullable = false)
     private String username;
 
+    @NotBlank(message = "Password is required")
     @Column(nullable = false)
     private String password;
 
+    @NotBlank(message = "Email is required")
     @Column(nullable = false)
     private String email;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ERole role;
 
-    @Column(nullable = false) // Add the 'enabled' column to match the query.
-    private boolean enabled;  // Indicates if the user account is active
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean enabled;
 
     public enum ERole {
         ROLE_USER, ROLE_ADMIN

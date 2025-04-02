@@ -1,10 +1,13 @@
 package com.diyncrafts.webapp.service;
 
 import com.diyncrafts.webapp.model.Guide;
+import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.repository.jpa.GuideRepository;
+import com.diyncrafts.webapp.repository.jpa.VideoRepository;
 
 import software.amazon.awssdk.core.async.AsyncRequestBody;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,40 +24,75 @@ public class GuideService {
     private GuideRepository guideRepository;
 
     @Autowired
+    private VideoRepository videoRepository;
+
+    @Autowired
     private S3AsyncClient s3Client;
 
     @Value("${aws.s3.bucketName}")
     private String bucketName;
 
-    public Guide createGuide(Guide guide, MultipartFile imageFile) throws IOException {
+    public Guide createGuide(
+            String title, 
+            String content, 
+            Long videoId, 
+            MultipartFile imageFile) throws IOException {
+        
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new RuntimeException("Video not found"));
+
+        Guide guide = new Guide();
+        guide.setTitle(title);
+        guide.setContent(content);
+        guide.setVideo(video);
+
         if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
-            s3Client.putObject(req -> req.bucket(bucketName)
-                                .key(fileName),
-                                 AsyncRequestBody.fromBytes(imageFile.getBytes()));
-            guide.setImageUrl("https://" + bucketName + ".s3.amazonaws.com/" + fileName);
+            String fileName = generateUniqueFileName(imageFile.getOriginalFilename());
+            
+            // Correct S3AsyncClient usage
+            s3Client.putObject(
+                PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(fileName)
+                    .build(),
+                AsyncRequestBody.fromBytes(imageFile.getBytes())
+            ).join(); // Wait for async operation to complete
+            
+            guide.setImageUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName));
         }
+
         return guideRepository.save(guide);
     }
 
-    public List<Guide> getGuidesByVideoId(String videoId, int page, int size) {
-        int offset = (page - 1) * size;
-        return guideRepository.findByVideoId(videoId, offset, size);
+    public List<Guide> getGuidesByVideoId(Long videoId, int offset, int limit) {
+        return guideRepository.findByVideoId(videoId, offset, limit);
     }
 
-    public Guide updateGuide(Long id, Guide updatedGuide, MultipartFile imageFile) throws IOException {
+    public Guide updateGuide(
+            Long id, 
+            String title, 
+            String content, 
+            MultipartFile imageFile) throws IOException {
+        
         Guide existingGuide = guideRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Guide not found"));
 
-        existingGuide.setTitle(updatedGuide.getTitle());
-        existingGuide.setContent(updatedGuide.getContent());
+        existingGuide.setTitle(title);
+        existingGuide.setContent(content);
 
         if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = System.currentTimeMillis() + "_" + imageFile.getOriginalFilename();
-            s3Client.putObject(req -> req.bucket(bucketName)
-                                .key(fileName),
-                                 AsyncRequestBody.fromBytes(imageFile.getBytes()));
-            existingGuide.setImageUrl("https://" + bucketName + ".s3.amazonaws.com/" + fileName);
+            String fileName = generateUniqueFileName(imageFile.getOriginalFilename());
+            
+            // Correct S3AsyncClient usage
+            s3Client.putObject(
+                PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(fileName)
+                    .build(),
+                AsyncRequestBody.fromBytes(imageFile.getBytes())
+            ).join(); // Wait for async operation to complete
+            
+            existingGuide.setImageUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName));
         }
 
         return guideRepository.save(existingGuide);
@@ -62,5 +100,9 @@ public class GuideService {
 
     public void deleteGuide(Long id) {
         guideRepository.deleteById(id);
+    }
+
+    private String generateUniqueFileName(String originalName) {
+        return System.currentTimeMillis() + "-" + originalName;
     }
 }

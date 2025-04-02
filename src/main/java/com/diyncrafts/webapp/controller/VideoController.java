@@ -33,7 +33,7 @@ public class VideoController {
     @PostMapping("/upload")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> uploadVideo(
-        @RequestPart("file") MultipartFile file,
+        @RequestPart("videoFile") MultipartFile videoFile,
         @Valid @ModelAttribute VideoUploadRequest videoUploadRequest
     ) throws IOException {
         
@@ -41,8 +41,8 @@ public class VideoController {
         logger.info("Received upload request for video: {}", videoUploadRequest.getTitle());
         
         // 2. Log file details (to confirm it's present)
-        if (file != null) {
-            logger.debug("File received: name={}, size={} bytes", file.getOriginalFilename(), file.getSize());
+        if (videoFile != null) {
+            logger.debug("File received: name={}, size={} bytes", videoFile.getOriginalFilename(), videoFile.getSize());
         } else {
             logger.warn("No file attached to the request.");
         }
