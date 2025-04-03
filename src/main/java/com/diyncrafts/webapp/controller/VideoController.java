@@ -58,6 +58,51 @@ public class VideoController {
         return ResponseEntity.ok(uploadedVideo);
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ROLE_USER')")
+    public ResponseEntity<Video> updateVideo(
+        @PathVariable Long id,
+        @RequestPart("videoFile") MultipartFile videoFile,
+        @Valid @ModelAttribute VideoUploadRequest videoUploadRequest
+    ) throws IOException {
+        
+        // 1. Log the update request
+        logger.info("Received update request for video ID: {}", id);
+        logger.info("Update details: title '{}', category '{}'", 
+            videoUploadRequest.getTitle(), videoUploadRequest.getCategory());
+        
+        // 2. Log file details (if present)
+        if (videoFile != null) {
+            logger.debug("New file provided: name={}, size={} bytes", 
+                videoFile.getOriginalFilename(), videoFile.getSize());
+        } else {
+            logger.debug("No new file attached in the update request.");
+        }
+
+        // 3. Log authentication details
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        logger.info("User '{}' is updating video ID={}", authentication.getName(), id);
+
+        // 4. Perform the update through the service
+        Video updatedVideo = videoService.updateVideo(
+            id, 
+            videoUploadRequest, 
+            videoFile, 
+            authentication
+        );
+
+        // 5. Log success and return response
+        logger.info("Video updated successfully: ID={}", updatedVideo.getId());
+        return ResponseEntity.ok(updatedVideo);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ROLE_USER')")
+    public ResponseEntity<Void> deleteVideo(@PathVariable Long id) {
+        videoService.deleteVideo(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping
     public ResponseEntity<List<Video>> getAllVideos() {
         return ResponseEntity.ok(videoService.getAllVideos());
@@ -69,12 +114,6 @@ public class VideoController {
         return ResponseEntity.ok(videoService.getVideoById(id));
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Void> deleteVideo(@PathVariable Long id) {
-        videoService.deleteVideo(id);
-        return ResponseEntity.noContent().build();
-    }
 
     @GetMapping("/category/{category}")
     public ResponseEntity<List<Video>> getVideosByCategory(@PathVariable String category) {

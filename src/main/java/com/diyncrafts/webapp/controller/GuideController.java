@@ -1,17 +1,25 @@
 package com.diyncrafts.webapp.controller;
 
+import com.diyncrafts.webapp.dto.GuideCreateRequest;
+import com.diyncrafts.webapp.dto.GuideUpdateRequest;
 import com.diyncrafts.webapp.model.Guide;
 import com.diyncrafts.webapp.service.GuideService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.validation.Valid;
 import java.io.IOException;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/guides")
+@Validated
 public class GuideController {
 
     private final GuideService guideService;
@@ -20,36 +28,41 @@ public class GuideController {
         this.guideService = guideService;
     }
 
-    @PostMapping(consumes = {"multipart/form-data"})
+    // Create Guide
+    @PostMapping(consumes = "multipart/form-data")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> createGuide(
-            @RequestParam("title") String title,
-            @RequestParam("content") String content,
-            @RequestParam("videoId") Long videoId,
-            @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
-        return ResponseEntity.ok(guideService.createGuide(title, content, videoId, imageFile));
+        @Valid @ModelAttribute GuideCreateRequest request,
+        @RequestPart(required = false) MultipartFile imageFile
+    ) throws IOException {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(guideService.createGuide(request, imageFile, authentication));
     }
 
+    // Get Guides by Video
     @GetMapping("/video/{videoId}")
-    public ResponseEntity<List<Guide>> getGuidesByVideoId(
+    public ResponseEntity<List<Guide>> getGuidesByVideo(
         @PathVariable Long videoId,
         @RequestParam(defaultValue = "1") int page,
-        @RequestParam(defaultValue = "10") int limit) {
-        
-        int offset = (page - 1) * limit;
-        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, offset, limit));
+        @RequestParam(defaultValue = "10") int size
+    ) {
+        int offset = (page - 1) * size;
+        return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, offset, size));
     }
 
+    // Update Guide
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> updateGuide(
-            @PathVariable Long id,
-            @RequestParam("title") String title,
-            @RequestParam("content") String content,
-            @RequestParam(value = "imageFile", required = false) MultipartFile imageFile) throws IOException {
-        return ResponseEntity.ok(guideService.updateGuide(id, title, content, imageFile));
+        @PathVariable Long id,
+        @Valid @ModelAttribute GuideUpdateRequest request,
+        @RequestPart(required = false) MultipartFile imageFile
+    ) throws IOException {
+        return ResponseEntity.ok(guideService.updateGuide(id, request, imageFile));
     }
 
+    // Delete Guide
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Void> deleteGuide(@PathVariable Long id) {

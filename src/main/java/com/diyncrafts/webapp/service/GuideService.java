@@ -1,8 +1,12 @@
 package com.diyncrafts.webapp.service;
 
+import com.diyncrafts.webapp.dto.GuideCreateRequest;
+import com.diyncrafts.webapp.dto.GuideUpdateRequest;
 import com.diyncrafts.webapp.model.Guide;
+import com.diyncrafts.webapp.model.User;
 import com.diyncrafts.webapp.model.Video;
 import com.diyncrafts.webapp.repository.jpa.GuideRepository;
+import com.diyncrafts.webapp.repository.jpa.UserRepository;
 import com.diyncrafts.webapp.repository.jpa.VideoRepository;
 
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -11,11 +15,17 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.core.Authentication;
+
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class GuideService {
@@ -32,77 +42,102 @@ public class GuideService {
     @Value("${aws.s3.bucketName}")
     private String bucketName;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Transactional
     public Guide createGuide(
-            String title, 
-            String content, 
-            Long videoId, 
-            MultipartFile imageFile) throws IOException {
-        
-        Video video = videoRepository.findById(videoId)
-                .orElseThrow(() -> new RuntimeException("Video not found"));
+            GuideCreateRequest guideCreateRequest, 
+            MultipartFile imageFile,
+            Authentication authentication) throws IOException {
+
+        Video video = videoRepository.findById(guideCreateRequest.getVideoId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found"));
+
+        // Check user ownership of video (replace with actual user check)
+        Video.checkUserOwnership(video);
+
+        User currentUser = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         Guide guide = new Guide();
-        guide.setTitle(title);
-        guide.setContent(content);
+        guide.setTitle(guideCreateRequest.getTitle());
+        guide.setContent(guideCreateRequest.getContent());
         guide.setVideo(video);
+        guide.setUser(currentUser);
 
-        if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = generateUniqueFileName(imageFile.getOriginalFilename());
-            
-            // Correct S3AsyncClient usage
-            s3Client.putObject(
-                PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(fileName)
-                    .build(),
-                AsyncRequestBody.fromBytes(imageFile.getBytes())
-            ).join(); // Wait for async operation to complete
-            
-            guide.setImageUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName));
-        }
+        String imageUrl = uploadImage(imageFile);
+        guide.setImageUrl(imageUrl);
 
         return guideRepository.save(guide);
+    }
+
+    @Transactional
+    public Guide updateGuide(
+            Long id, 
+            GuideUpdateRequest guideUpdateRequest, 
+            MultipartFile imageFile) throws IOException {
+
+        Guide existingGuide = guideRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guide not found"));
+
+        // Check user ownership of guide
+        Guide.checkUserOwnership(existingGuide);
+
+        existingGuide.setTitle(guideUpdateRequest.getTitle());
+        existingGuide.setContent(guideUpdateRequest.getContent());
+
+        if (imageFile != null && !imageFile.isEmpty()) {
+            String newImageUrl = uploadImage(imageFile);
+            existingGuide.setImageUrl(newImageUrl);
+        }
+
+        return guideRepository.save(existingGuide);
     }
 
     public List<Guide> getGuidesByVideoId(Long videoId, int offset, int limit) {
         return guideRepository.findByVideoId(videoId, offset, limit);
     }
 
-    public Guide updateGuide(
-            Long id, 
-            String title, 
-            String content, 
-            MultipartFile imageFile) throws IOException {
-        
-        Guide existingGuide = guideRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Guide not found"));
+    @Transactional
+    public void deleteGuide(Long id) {
+        Guide guide = guideRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guide not found"));
 
-        existingGuide.setTitle(title);
-        existingGuide.setContent(content);
+        // Check user ownership of guide
+        Guide.checkUserOwnership(guide);
 
-        if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = generateUniqueFileName(imageFile.getOriginalFilename());
-            
-            // Correct S3AsyncClient usage
+        guideRepository.deleteById(id);
+    }
+
+    private String uploadImage(MultipartFile imageFile) throws IOException {
+        if (imageFile == null || imageFile.isEmpty()) {
+            return null;
+        }
+
+        String fileName = generateUniqueFileName(imageFile.getOriginalFilename());
+        byte[] fileBytes = imageFile.getBytes();
+
+        try {
             s3Client.putObject(
                 PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(fileName)
                     .build(),
-                AsyncRequestBody.fromBytes(imageFile.getBytes())
-            ).join(); // Wait for async operation to complete
-            
-            existingGuide.setImageUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName));
+                AsyncRequestBody.fromBytes(fileBytes)
+            ).join();
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload image", e);
         }
 
-        return guideRepository.save(existingGuide);
+        return String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName);
     }
 
-    public void deleteGuide(Long id) {
-        guideRepository.deleteById(id);
-    }
+    
+
+    
 
     private String generateUniqueFileName(String originalName) {
-        return System.currentTimeMillis() + "-" + originalName;
+        return UUID.randomUUID() + "-" + originalName;
     }
 }

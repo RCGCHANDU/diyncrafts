@@ -2,11 +2,23 @@ package com.diyncrafts.webapp.repository.jpa;
 
 import com.diyncrafts.webapp.model.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, Long> {
-    // Method name follows Spring Data JPA naming convention
-    Category findByName(String categoryName); // "name" is the field in Category
+    // Standard method for finding by name
+    Category findByName(String name);
+
+    // Check existence by name for uniqueness validation
+    boolean existsByName(String name);
+
+    // Custom query for case-insensitive search (if needed)
+    @Query("SELECT c FROM Category c WHERE LOWER(c.name) = LOWER(:name)")
+    Category findByNameIgnoreCase(@Param("name") String name);
+
+    // Method to get all categories with pagination (if needed)
+    // List<Category> findAll(Pageable pageable); // Already exists in JpaRepository
 }

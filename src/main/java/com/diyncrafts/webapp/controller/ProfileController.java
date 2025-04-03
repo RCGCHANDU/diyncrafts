@@ -4,11 +4,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.diyncrafts.webapp.model.User;
 import com.diyncrafts.webapp.service.UserService;
 
 @RestController
@@ -28,7 +27,7 @@ public class ProfileController {
 
     @PutMapping("/profile")
     @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<?> updateProfile(@RequestBody User updatedUser) {
-        return ResponseEntity.ok(userService.updateUserProfile(updatedUser));
+    public ResponseEntity<?> updateProfile(@RequestParam String mailId) {
+        return ResponseEntity.ok(userService.updateUserProfile(mailId));
     }
 }

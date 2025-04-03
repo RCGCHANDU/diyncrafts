@@ -113,6 +113,63 @@ public class VideoService {
         return savedVideo;
     }
 
+    public Video updateVideo(
+        Long id, 
+        VideoUploadRequest request, 
+        MultipartFile newVideoFile, 
+        Authentication authentication
+    ) throws IOException {
+        
+        // 1. Retrieve existing video
+        Video existingVideo = videoRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Video not found"));
+
+        // 2. Check ownership
+        User currentUser = userRepository.findByUsername(authentication.getName())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!existingVideo.getUser().equals(currentUser)) {
+            throw new RuntimeException("Unauthorized to update this video");
+        }
+
+        // 3. Update metadata fields
+        existingVideo.setTitle(request.getTitle());
+        existingVideo.setDescription(request.getDescription());
+        existingVideo.setDifficultyLevel(request.getDifficultyLevel());
+
+        // 4. Update category
+        String categoryName = request.getCategory();
+        if (categoryName != null) {
+            Category category = categoryRepository.findByName(categoryName);
+            existingVideo.setCategory(category);
+        }
+
+        // 5. Handle new video file upload
+        if (newVideoFile != null && !newVideoFile.isEmpty()) {
+            // Upload new video to S3
+            byte[] videoBytes = newVideoFile.getBytes();
+            String videoContentType = newVideoFile.getContentType();
+            String videoFileName = System.currentTimeMillis() + "_" + newVideoFile.getOriginalFilename();
+            String newVideoUrl = uploadBytesToS3(videoBytes, videoFileName, videoContentType);
+            existingVideo.setVideoUrl(newVideoUrl);
+
+            // Extract new thumbnail from video content
+            BufferedImage thumbnailImage = extractThumbnailFromBytes(videoBytes);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(thumbnailImage, "jpg", baos);
+            byte[] thumbnailBytes = baos.toByteArray();
+            String thumbnailFileName = System.currentTimeMillis() + "_thumbnail.jpg";
+            String newThumbnailUrl = uploadBytesToS3(thumbnailBytes, thumbnailFileName, "image/jpeg");
+            existingVideo.setThumbnailUrl(newThumbnailUrl);
+        }
+
+        // 6. Save changes and update search index
+        Video updatedVideo = videoRepository.save(existingVideo);
+        videoSearchRepository.save(updatedVideo);
+        
+        return updatedVideo;
+    }
+
     private BufferedImage extractThumbnailFromBytes(byte[] videoBytes) throws IOException {
         try (InputStream inputStream = new ByteArrayInputStream(videoBytes);
              FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(inputStream)) {
