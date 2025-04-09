@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -123,5 +124,12 @@ public class VideoController {
     @GetMapping("/difficulty/{difficultyLevel}")
     public ResponseEntity<List<Video>> getVideosByDifficultyLevel(@PathVariable String difficultyLevel) {
         return ResponseEntity.ok(videoService.getVideosByDifficultyLevel(difficultyLevel));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> handleGeneralException(Exception e) {
+        logger.error("An unexpected error occurred: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                             .body("An unexpected error occurred: " + e.getMessage());
     }
 }
