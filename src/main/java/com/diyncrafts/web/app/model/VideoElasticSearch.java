@@ -16,7 +16,7 @@ public class VideoElasticSearch {
     private String userName; 
     private List<String> materialsUsed;
 
-    public VideoElasticSearch(Video video) {
+    public void syncWithVideoEntity(Video video) {
         this.id = video.getId();
         this.title = video.getTitle();
         this.description = video.getDescription();

@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.diyncrafts.web.app.model.ProgressMessage;
 import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.model.TaskStatus;
-import com.diyncrafts.web.app.repository.TaskRepository;
+import com.diyncrafts.web.app.model.Video;
+import com.diyncrafts.web.app.repository.jpa.TaskRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -271,6 +272,9 @@ public class TranscodingService {
             task.setProgress(100.0);
             // Upload to S3
             storageService.uploadToS3(outputDir, task.getTaskId());
+
+            Video video = new Video();
+            video.setVideoUrl(storageService.getPublicUrl(task.getTaskId()));
 
             // Update output location to S3 URL
             task.setOutputLocation(storageService.getPublicUrl(task.getTaskId()));

@@ -50,7 +50,7 @@ public class VideoService {
     @Value("${aws.s3.region}")
     private String region;
 
-    public Video uploadVideo(VideoUploadRequest videoUploadRequest, Authentication authentication) throws IOException {
+    public Video createVideo(VideoUploadRequest videoUploadRequest, Authentication authentication) throws IOException {
         MultipartFile videoFile = videoUploadRequest.getVideoFile();
         String title = videoUploadRequest.getTitle();
         String description = videoUploadRequest.getDescription();
@@ -60,12 +60,6 @@ public class VideoService {
 
         Video video = new Video();
         String videoFileName = System.currentTimeMillis() + "_" + videoFile.getOriginalFilename();
-        String videoUrl = storageService.upload(
-            videoFile.getBytes(),
-            videoFileName,
-            videoFile.getContentType()
-        );
-        video.setVideoUrl(videoUrl);
 
         // Handle thumbnail
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
@@ -101,8 +95,9 @@ public class VideoService {
         }
 
         Video savedVideo = videoRepository.save(video);
-        VideoElasticSearch esvideo = new VideoElasticSearch(savedVideo);
-        videoElasticSearchRepository.save(esvideo);
+        VideoElasticSearch videoIndex = new VideoElasticSearch();
+        videoIndex.syncWithVideoEntity(savedVideo);
+        videoElasticSearchRepository.save(videoIndex);
         return savedVideo;
     }
 
@@ -173,9 +168,10 @@ public class VideoService {
 
         // 6. Save changes and update search index
         Video updatedVideo = videoRepository.save(existingVideo);
-        VideoElasticSearch esVideo = new VideoElasticSearch(updatedVideo);
-        videoElasticSearchRepository.save(esVideo);
-        
+
+        VideoElasticSearch videoIndex = new VideoElasticSearch();
+        videoIndex.syncWithVideoEntity(updatedVideo);
+        videoElasticSearchRepository.save(videoIndex);
         return updatedVideo;
     }
 
@@ -195,6 +191,7 @@ public class VideoService {
             throw new RuntimeException("Video not found");
         }
         videoRepository.deleteById(id);
+        videoElasticSearchRepository.deleteById(id);
     }
 
     public List<Video> getVideosByCategory(String categoryName) {

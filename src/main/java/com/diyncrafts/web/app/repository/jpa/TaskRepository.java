@@ -1,4 +1,4 @@
-package com.diyncrafts.web.app.repository;
+package com.diyncrafts.web.app.repository.jpa;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

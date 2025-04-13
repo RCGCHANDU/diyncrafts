@@ -24,8 +24,8 @@ public class TranscodingStorageService {
     private final String region;
 
     public TranscodingStorageService(
-        @Value("${aws.s3.bucket}") String bucketName,
-        @Value("${aws.region}") String region
+        @Value("${aws.s3.bucketName}") String bucketName,
+        @Value("${aws.s3.region}") String region
     ) {
         this.bucketName = Objects.requireNonNull(bucketName);
         this.region = Objects.requireNonNull(region);

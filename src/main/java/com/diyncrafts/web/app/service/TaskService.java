@@ -8,7 +8,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.model.TaskStatus;
-import com.diyncrafts.web.app.repository.TaskRepository;
+import com.diyncrafts.web.app.repository.jpa.TaskRepository;
 
 import org.springframework.amqp.core.AmqpTemplate;
 import java.io.File;

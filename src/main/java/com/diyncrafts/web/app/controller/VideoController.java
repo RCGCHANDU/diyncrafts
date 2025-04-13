@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/videos")
+@RequestMapping("/api/videos/")
 public class VideoController {
 
     private final VideoService videoService;
@@ -31,29 +31,21 @@ public class VideoController {
         this.videoService = videoService;
     }
 
-    @PostMapping("/upload")
+    @PostMapping("/create/")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> uploadVideo(
-        @RequestPart("videoFile") MultipartFile videoFile,
         @Valid @ModelAttribute VideoUploadRequest videoUploadRequest
     ) throws IOException {
         
         // 1. Log that the request was received
         logger.info("Received upload request for video: {}", videoUploadRequest.getTitle());
-        
-        // 2. Log file details (to confirm it's present)
-        if (videoFile != null) {
-            logger.debug("File received: name={}, size={} bytes", videoFile.getOriginalFilename(), videoFile.getSize());
-        } else {
-            logger.warn("No file attached to the request.");
-        }
 
         // 3. Log authentication details (to confirm security context)
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        logger.info("User '{}' is attempting to upload a video", authentication.getName());
+        logger.info("User '{}' is attempting to create a video", authentication.getName());
 
         // 4. Log before returning the response
-        Video uploadedVideo = videoService.uploadVideo(videoUploadRequest, authentication);
+        Video uploadedVideo = videoService.createVideo(videoUploadRequest, authentication);
         logger.info("Video uploaded successfully: ID={}", uploadedVideo.getId());
 
         return ResponseEntity.ok(uploadedVideo);

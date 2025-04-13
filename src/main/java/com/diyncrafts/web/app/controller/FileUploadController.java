@@ -11,8 +11,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.diyncrafts.web.app.dto.VideoUploadRequest;
 import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.service.TaskService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/transcode")
@@ -22,7 +25,9 @@ public class FileUploadController {
 
     @PostMapping("/upload")
     @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Task> upload(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Task> upload(
+        @RequestParam("file") MultipartFile file
+        ) {
         String taskId = taskService.initiateTranscoding(file);
         return ResponseEntity.ok(taskService.getTask(taskId));
     }
