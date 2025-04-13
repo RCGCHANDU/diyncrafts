@@ -18,30 +18,30 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Task;
-import com.diyncrafts.web.app.service.VideoDatabaseService;
 import com.diyncrafts.web.app.service.VideoUploadService;
 
 import jakarta.validation.Valid;
 
 @RestController
-@RequestMapping("/api/transcode")
+@RequestMapping("/api/videos")
 public class VideoUploadController {
     @Autowired
     private VideoUploadService taskService;
 
     @Autowired
-    private VideoDatabaseService videoDatabaseService;
+    private VideoUploadService videoUploadService;
 
     @PostMapping("/upload")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Task> upload(
-        @RequestParam("file") MultipartFile file,
+        @RequestParam("videoFile") MultipartFile file,
         @Valid @ModelAttribute VideoMetadata videoUploadRequest
         ) throws IOException {
-        String taskId = taskService.initiateTranscoding(file);
+        videoUploadRequest.setVideoFile(file);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long videoId = videoUploadService.createVideo(videoUploadRequest, authentication);
+        String taskId = taskService.initiateTranscoding(file, videoId);
 
-        videoDatabaseService.createVideo(videoUploadRequest, authentication);
         return ResponseEntity.ok(taskService.getTask(taskId));
     }
 

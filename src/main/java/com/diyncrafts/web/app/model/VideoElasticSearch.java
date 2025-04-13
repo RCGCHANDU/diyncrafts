@@ -21,7 +21,7 @@ public class VideoElasticSearch {
         this.title = video.getTitle();
         this.description = video.getDescription();
         this.difficultyLevel = video.getDifficultyLevel();
-        this.categoryName = video.getCategory().getName();
+        this.categoryName = video.getCategory() != null ? video.getCategory().getName() : null;
         this.userName = video.getUser().getUsername();
         this.materialsUsed = video.getMaterialsUsed();
     }

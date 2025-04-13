@@ -10,6 +10,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.diyncrafts.web.app.dto.VideoMetadata;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -59,6 +61,14 @@ public class Video {
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    public Video(VideoMetadata videoMetadata) {
+        this.title = videoMetadata.getTitle();
+        this.description = videoMetadata.getDescription();
+        this.difficultyLevel = videoMetadata.getDifficultyLevel();
+    }
+
+    public Video() { }
 
     // Check user ownership with null safety
     public static void checkUserOwnership(Video video) {

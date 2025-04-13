@@ -61,6 +61,8 @@ public class VideoDatabaseService {
         MultipartFile thumbnailFile = videoUploadRequest.getThumbnailFile();
 
         Video video = new Video();
+        video.setVideoUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, video.getTitle()));
+
 
         // Handle thumbnail
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
@@ -78,7 +80,7 @@ public class VideoDatabaseService {
             // Convert byte array to InputStream
             InputStream thumbnailInputStream = new ByteArrayInputStream(thumbnailBytes);
             storageService.uploadFile(thumbnailInputStream, thumbnailBytes.length, "image/jpeg");
-            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
+            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s_thumbnail", bucketName, video.getTitle() ));
         }
 
         User currentUser = userRepository.findByUsername(authentication.getName())

@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,7 @@ import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.model.TaskStatus;
 import com.diyncrafts.web.app.model.Video;
 import com.diyncrafts.web.app.repository.jpa.TaskRepository;
+import com.diyncrafts.web.app.repository.jpa.VideoRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +40,9 @@ public class VideoTranscodingService {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private VideoRepository videoRepository;
 
     @Value("${file.output.path}")
     private String outputBasePath;
@@ -67,7 +72,9 @@ public class VideoTranscodingService {
 
     @RabbitListener(queues = "transcoding.queue")
     @Transactional
-    public void processTask(String taskId) {
+    public void processTask(Map<String, Object> message) {
+        String taskId = (String) message.get("taskId");
+        Long videoId = ((Number) message.get("videoId")).longValue();
         Task task = null;
         try {
             task = retrieveAndStartTask(taskId);
@@ -78,7 +85,7 @@ public class VideoTranscodingService {
             Process ffmpegProcess = executeFFmpegCommand(command);
             setupProgressTracking(ffmpegProcess, task, totalDuration);
             int exitCode = ffmpegProcess.waitFor();
-            handleProcessCompletion(task, exitCode, outputDir);
+            handleProcessCompletion(task, exitCode, outputDir, videoId);
         } catch (Exception e) {
             handleException(task, e);
         } finally {
@@ -266,14 +273,15 @@ public class VideoTranscodingService {
     }
     
 
-    private void handleProcessCompletion(Task task, int exitCode, String outputDir) {
+    private void handleProcessCompletion(Task task, int exitCode, String outputDir, Long videoId) {
         if (exitCode == 0) {
             task.setStatus(TaskStatus.COMPLETED);
             task.setProgress(100.0);
             // Upload to S3
             storageService.uploadToS3(outputDir, task.getTaskId());
 
-            Video video = new Video();
+            Video video = videoRepository.findById(videoId).orElseThrow();
+            
             video.setVideoUrl(storageService.getPublicUrl(task.getTaskId()));
 
             // Update output location to S3 URL

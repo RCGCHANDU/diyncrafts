@@ -10,8 +10,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
 import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Video;
 import com.diyncrafts.web.app.service.VideoDatabaseService;
@@ -55,7 +53,6 @@ public class VideoController {
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> updateVideo(
         @PathVariable Long id,
-        @RequestPart("videoFile") MultipartFile videoFile,
         @Valid @ModelAttribute VideoMetadata videoMetadata
     ) throws IOException {
         
@@ -64,14 +61,6 @@ public class VideoController {
         logger.info("Update details: title '{}', category '{}'", 
         videoMetadata.getTitle(), videoMetadata.getCategory());
         
-        // 2. Log file details (if present)
-        if (videoFile != null) {
-            logger.debug("New file provided: name={}, size={} bytes", 
-                videoFile.getOriginalFilename(), videoFile.getSize());
-        } else {
-            logger.debug("No new file attached in the update request.");
-        }
-
         // 3. Log authentication details
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         logger.info("User '{}' is updating video ID={}", authentication.getName(), id);

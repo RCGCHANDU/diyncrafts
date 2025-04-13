@@ -3,9 +3,11 @@ package com.diyncrafts.web.app.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.model.TaskStatus;
 import com.diyncrafts.web.app.repository.jpa.TaskRepository;
@@ -14,6 +16,8 @@ import org.springframework.amqp.core.AmqpTemplate;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -26,9 +30,12 @@ public class VideoUploadService {
     private TaskRepository taskRepository;
 
     @Autowired
+    private VideoDatabaseService videoDatabaseService;
+
+    @Autowired
     private AmqpTemplate rabbitTemplate; // For sending to RabbitMQ
 
-    public String initiateTranscoding(MultipartFile file) {
+    public String initiateTranscoding(MultipartFile file, Long videoId) {
         String taskId = UUID.randomUUID().toString();
 
         // 1. Save the uploaded file to a temporary directory
@@ -59,14 +66,22 @@ public class VideoUploadService {
             // 3. Save the task to the database
             taskRepository.save(task);
 
+            Map<String, Object> message = new HashMap<>();
+            message.put("taskId", taskId);
+            message.put("videoId", videoId);
+
             // 4. Send the task ID to the RabbitMQ queue
-            rabbitTemplate.convertAndSend("transcoding.queue", taskId);
+            rabbitTemplate.convertAndSend("transcoding.queue", message);
 
             return taskId;
         } catch (IOException | RuntimeException e) {
             // Handle errors (e.g., cleanup, logging)
             throw new RuntimeException("Failed to initiate transcoding: " + e.getMessage(), e);
         }
+    }
+
+    public Long createVideo(VideoMetadata videoMetadata, Authentication authentication) throws IOException {
+        return videoDatabaseService.createVideo(videoMetadata, authentication).getId();
     }
 
     public Task getTask(String taskId) {
