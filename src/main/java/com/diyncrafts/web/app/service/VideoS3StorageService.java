@@ -15,15 +15,15 @@ import java.io.InputStream;
 import java.util.Objects;
 
 @Service
-public class TranscodingStorageService {
+public class VideoS3StorageService {
 
-    private static final Logger logger = LoggerFactory.getLogger(TranscodingStorageService.class);
+    private static final Logger logger = LoggerFactory.getLogger(VideoS3StorageService.class);
 
     private final S3Client s3Client;
     private final String bucketName;
     private final String region;
 
-    public TranscodingStorageService(
+    public VideoS3StorageService(
         @Value("${aws.s3.bucketName}") String bucketName,
         @Value("${aws.s3.region}") String region
     ) {
@@ -73,7 +73,7 @@ public class TranscodingStorageService {
         return String.format("%s/%s", taskId, fileName);
     }
 
-    private void uploadFile(InputStream inputStream, long contentLength, String key) {
+    public void uploadFile(InputStream inputStream, long contentLength, String key) {
         try {
             PutObjectRequest.Builder putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)

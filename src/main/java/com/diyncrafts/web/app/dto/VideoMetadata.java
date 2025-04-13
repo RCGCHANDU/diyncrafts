@@ -5,7 +5,7 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
-public class VideoUploadRequest {
+public class VideoMetadata {
 
     @NotBlank(message = "Title is required")
     private String title;

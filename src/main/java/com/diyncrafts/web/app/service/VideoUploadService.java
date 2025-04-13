@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
-public class TaskService {
+public class VideoUploadService {
 
     @Value("${file.upload.path}")
     private String uploadPath;

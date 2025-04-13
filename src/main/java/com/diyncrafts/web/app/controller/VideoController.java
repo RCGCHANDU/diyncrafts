@@ -12,9 +12,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.diyncrafts.web.app.dto.VideoUploadRequest;
+import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Video;
-import com.diyncrafts.web.app.service.VideoService;
+import com.diyncrafts.web.app.service.VideoDatabaseService;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,29 +23,29 @@ import java.util.List;
 @RequestMapping("/api/videos/")
 public class VideoController {
 
-    private final VideoService videoService;
+    private final VideoDatabaseService videoService;
 
     private static final Logger logger = LoggerFactory.getLogger(VideoController.class);
 
-    public VideoController(VideoService videoService) {
+    public VideoController(VideoDatabaseService videoService) {
         this.videoService = videoService;
     }
 
     @PostMapping("/create/")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> uploadVideo(
-        @Valid @ModelAttribute VideoUploadRequest videoUploadRequest
+        @Valid @ModelAttribute VideoMetadata videoMetadata
     ) throws IOException {
         
         // 1. Log that the request was received
-        logger.info("Received upload request for video: {}", videoUploadRequest.getTitle());
+        logger.info("Received upload request for video: {}", videoMetadata.getTitle());
 
         // 3. Log authentication details (to confirm security context)
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         logger.info("User '{}' is attempting to create a video", authentication.getName());
 
         // 4. Log before returning the response
-        Video uploadedVideo = videoService.createVideo(videoUploadRequest, authentication);
+        Video uploadedVideo = videoService.createVideo(videoMetadata, authentication);
         logger.info("Video uploaded successfully: ID={}", uploadedVideo.getId());
 
         return ResponseEntity.ok(uploadedVideo);
@@ -56,13 +56,13 @@ public class VideoController {
     public ResponseEntity<Video> updateVideo(
         @PathVariable Long id,
         @RequestPart("videoFile") MultipartFile videoFile,
-        @Valid @ModelAttribute VideoUploadRequest videoUploadRequest
+        @Valid @ModelAttribute VideoMetadata videoMetadata
     ) throws IOException {
         
         // 1. Log the update request
         logger.info("Received update request for video ID: {}", id);
         logger.info("Update details: title '{}', category '{}'", 
-            videoUploadRequest.getTitle(), videoUploadRequest.getCategory());
+        videoMetadata.getTitle(), videoMetadata.getCategory());
         
         // 2. Log file details (if present)
         if (videoFile != null) {
@@ -79,8 +79,7 @@ public class VideoController {
         // 4. Perform the update through the service
         Video updatedVideo = videoService.updateVideo(
             id, 
-            videoUploadRequest, 
-            videoFile, 
+            videoMetadata, 
             authentication
         );
 

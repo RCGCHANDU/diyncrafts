@@ -27,11 +27,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Service
-public class TranscodingService {
-    private static final Logger logger = LoggerFactory.getLogger(TranscodingService.class);
+public class VideoTranscodingService {
+    private static final Logger logger = LoggerFactory.getLogger(VideoTranscodingService.class);
 
     @Autowired
-    private TranscodingStorageService storageService;
+    private VideoS3StorageService storageService;
 
     @Autowired
     private TaskRepository taskRepository;

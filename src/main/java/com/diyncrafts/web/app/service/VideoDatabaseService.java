@@ -6,7 +6,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.diyncrafts.web.app.dto.VideoUploadRequest;
+import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Category;
 import com.diyncrafts.web.app.model.User;
 import com.diyncrafts.web.app.model.Video;
@@ -17,14 +17,16 @@ import com.diyncrafts.web.app.repository.jpa.UserRepository;
 import com.diyncrafts.web.app.repository.jpa.VideoRepository;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.List;
 import javax.imageio.ImageIO;
 
 @Service
-public class VideoService {
+public class VideoDatabaseService {
 
     @Autowired
     private UserRepository userRepository;
@@ -36,7 +38,7 @@ public class VideoService {
     private VideoElasticSearchRepository videoElasticSearchRepository;
 
     @Autowired
-    private VideoStorageService storageService;
+    private VideoS3StorageService storageService;
     
     @Autowired
     private ThumbnailService thumbnailService;
@@ -50,7 +52,7 @@ public class VideoService {
     @Value("${aws.s3.region}")
     private String region;
 
-    public Video createVideo(VideoUploadRequest videoUploadRequest, Authentication authentication) throws IOException {
+    public Video createVideo(VideoMetadata videoUploadRequest, Authentication authentication) throws IOException {
         MultipartFile videoFile = videoUploadRequest.getVideoFile();
         String title = videoUploadRequest.getTitle();
         String description = videoUploadRequest.getDescription();
@@ -59,24 +61,24 @@ public class VideoService {
         MultipartFile thumbnailFile = videoUploadRequest.getThumbnailFile();
 
         Video video = new Video();
-        String videoFileName = System.currentTimeMillis() + "_" + videoFile.getOriginalFilename();
 
         // Handle thumbnail
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
-            String thumbnailUrl = storageService.upload(
-                thumbnailFile.getBytes(),
-                thumbnailFile.getOriginalFilename(),
-                thumbnailFile.getContentType()
+            storageService.uploadFile(
+                thumbnailFile.getInputStream(),
+                thumbnailFile.getSize(),
+                thumbnailFile.getOriginalFilename()
             );
-            video.setThumbnailUrl(thumbnailUrl);
+            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
         } else {
             BufferedImage thumbnail = thumbnailService.extractThumbnail(videoFile.getBytes());
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(thumbnail, "jpg", baos);
             byte[] thumbnailBytes = baos.toByteArray();
-            String thumbnailFileName = System.currentTimeMillis() + "_thumbnail.jpg";
-            String thumbnailUrl = storageService.upload(thumbnailBytes, thumbnailFileName, "image/jpeg");
-            video.setThumbnailUrl(thumbnailUrl);
+            // Convert byte array to InputStream
+            InputStream thumbnailInputStream = new ByteArrayInputStream(thumbnailBytes);
+            storageService.uploadFile(thumbnailInputStream, thumbnailBytes.length, "image/jpeg");
+            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
         }
 
         User currentUser = userRepository.findByUsername(authentication.getName())
@@ -103,8 +105,7 @@ public class VideoService {
 
     public Video updateVideo(
         Long id, 
-        VideoUploadRequest request, 
-        MultipartFile newVideoFile, 
+        VideoMetadata request, 
         Authentication authentication
     ) throws IOException {
         
@@ -132,38 +133,15 @@ public class VideoService {
             existingVideo.setCategory(category);
         }
 
-        // 5. Handle new video file upload
-        if (newVideoFile != null && !newVideoFile.isEmpty()) {
-            storageService.delete(storageService.extractKeyFromUrl(existingVideo.getVideoUrl()));
-            storageService.delete(storageService.extractKeyFromUrl(existingVideo.getThumbnailUrl()));
-            
-            // Upload new video and thumbnail
-            String newVideoUrl = storageService.upload(
-                newVideoFile.getBytes(),
-                newVideoFile.getOriginalFilename(),
-                newVideoFile.getContentType()
+        MultipartFile thumbnailFile = request.getThumbnailFile();
+        // Handle thumbnail
+        if (thumbnailFile != null) {
+            storageService.uploadFile(
+                thumbnailFile.getInputStream(),
+                thumbnailFile.getSize(),
+                thumbnailFile.getOriginalFilename()
             );
-            existingVideo.setVideoUrl(newVideoUrl);
-
-            
-            MultipartFile thumbnailFile = request.getThumbnailFile();
-            // Handle thumbnail
-            if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
-                String thumbnailUrl = storageService.upload(
-                    thumbnailFile.getBytes(),
-                    thumbnailFile.getOriginalFilename(),
-                    thumbnailFile.getContentType()
-                );
-                existingVideo.setThumbnailUrl(thumbnailUrl);
-            } else {
-                BufferedImage thumbnail = thumbnailService.extractThumbnail(newVideoFile.getBytes());
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(thumbnail, "jpg", baos);
-                byte[] thumbnailBytes = baos.toByteArray();
-                String thumbnailFileName = System.currentTimeMillis() + "_thumbnail.jpg";
-                String thumbnailUrl = storageService.upload(thumbnailBytes, thumbnailFileName, "image/jpeg");
-                existingVideo.setThumbnailUrl(thumbnailUrl);
-            }
+            existingVideo.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
         }
 
         // 6. Save changes and update search index
