@@ -23,13 +23,17 @@ import com.diyncrafts.web.app.repository.jpa.VideoRepository;
 
 import org.springframework.security.core.Authentication;
 
-
 import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 public class GuideService {
+
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     @Autowired
     private GuideRepository guideRepository;
@@ -48,18 +52,22 @@ public class GuideService {
 
     @Transactional
     public Guide createGuide(
-            GuideCreateRequest guideCreateRequest, 
-            MultipartFile imageFile,
+            GuideCreateRequest guideCreateRequest,
             Authentication authentication) throws IOException {
 
         Video video = videoRepository.findById(guideCreateRequest.getVideoId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found"));
 
         // Check user ownership of video (replace with actual user check)
-        Video.checkUserOwnership(video);
+        // Video.checkUserOwnership(video);
 
+        logger.info("Looking up user with username: {}", authentication.getName());
         User currentUser = userRepository.findByUsername(authentication.getName())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> {
+                    logger.error("User with username {} not found", authentication.getName());
+                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+                });
+        
 
         Guide guide = new Guide();
         guide.setTitle(guideCreateRequest.getTitle());
@@ -67,16 +75,13 @@ public class GuideService {
         guide.setVideo(video);
         guide.setUser(currentUser);
 
-        String imageUrl = uploadImage(imageFile);
-        guide.setImageUrl(imageUrl);
-
         return guideRepository.save(guide);
     }
 
     @Transactional
     public Guide updateGuide(
-            Long id, 
-            GuideUpdateRequest guideUpdateRequest, 
+            Long id,
+            GuideUpdateRequest guideUpdateRequest,
             MultipartFile imageFile) throws IOException {
 
         Guide existingGuide = guideRepository.findById(id)
@@ -100,6 +105,12 @@ public class GuideService {
         return guideRepository.findByVideoId(videoId, offset, limit);
     }
 
+    @Transactional(readOnly = true)
+    public Guide getGuideById(Long id) {
+        return guideRepository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guide not found"));
+    }
+
     @Transactional
     public void deleteGuide(Long id) {
         Guide guide = guideRepository.findById(id)
@@ -121,22 +132,17 @@ public class GuideService {
 
         try {
             s3Client.putObject(
-                PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(fileName)
-                    .build(),
-                AsyncRequestBody.fromBytes(fileBytes)
-            ).join();
+                    PutObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(fileName)
+                            .build(),
+                    AsyncRequestBody.fromBytes(fileBytes)).join();
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload image", e);
         }
 
         return String.format("https://%s.s3.amazonaws.com/%s", bucketName, fileName);
     }
-
-    
-
-    
 
     private String generateUniqueFileName(String originalName) {
         return UUID.randomUUID() + "-" + originalName;

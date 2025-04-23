@@ -30,15 +30,13 @@ public class GuideController {
     }
 
     // Create Guide
-    @PostMapping(consumes = "multipart/form-data")
+    @PostMapping(consumes = "application/json")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Guide> createGuide(
-        @Valid @ModelAttribute GuideCreateRequest request,
-        @RequestPart(required = false) MultipartFile imageFile
-    ) throws IOException {
+        @Valid @RequestBody GuideCreateRequest request) throws IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(guideService.createGuide(request, imageFile, authentication));
+            .body(guideService.createGuide(request, authentication));
     }
 
     // Get Guides by Video
@@ -50,6 +48,13 @@ public class GuideController {
     ) {
         int offset = (page - 1) * size;
         return ResponseEntity.ok(guideService.getGuidesByVideoId(videoId, offset, size));
+    }
+
+    @GetMapping("/{id}") // Fixes the error
+    @PreAuthorize("hasRole('ROLE_USER')") // Adjust permissions as needed
+    public ResponseEntity<Guide> getGuide(@PathVariable Long id) {
+        Guide guide = guideService.getGuideById(id);
+        return ResponseEntity.ok(guide);
     }
 
     // Update Guide
