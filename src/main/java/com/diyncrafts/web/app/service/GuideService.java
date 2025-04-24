@@ -111,6 +111,10 @@ public class GuideService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Guide not found"));
     }
 
+    public List<Guide> getGuides(int offset, int limit) {
+        return guideRepository.findAll(limit, offset); // Order: limit first, offset second
+    }
+
     @Transactional
     public void deleteGuide(Long id) {
         Guide guide = guideRepository.findById(id)

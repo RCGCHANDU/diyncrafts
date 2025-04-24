@@ -20,4 +20,7 @@ public interface GuideRepository extends JpaRepository<Guide, Long> {
         @Param("offset") int offset,
         @Param("limit") int limit
     );
+
+    @Query(value = "SELECT * FROM guide ORDER BY id ASC LIMIT ?1 OFFSET ?2", nativeQuery = true)
+    List<Guide> findAll(int limit, int offset); // Order: limit first, offset second
 }

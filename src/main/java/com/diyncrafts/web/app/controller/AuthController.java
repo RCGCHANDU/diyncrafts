@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.diyncrafts.web.app.dto.AuthenticationResponse;
 import com.diyncrafts.web.app.dto.LoginRequest;
 import com.diyncrafts.web.app.dto.RegisterRequest;
 import com.diyncrafts.web.app.service.AuthService;
@@ -29,7 +30,8 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
-        return ResponseEntity.ok(authService.login(loginRequest));
+        AuthenticationResponse response = authService.login(loginRequest);
+        return ResponseEntity.ok(response);
     }
 
     @ExceptionHandler

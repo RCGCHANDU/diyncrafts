@@ -18,7 +18,7 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/videos/")
+@RequestMapping("/api/videos")
 public class VideoController {
 
     private final VideoDatabaseService videoService;
@@ -94,7 +94,6 @@ public class VideoController {
     public ResponseEntity<Video> getVideoById(@PathVariable Long id) {
         return ResponseEntity.ok(videoService.getVideoById(id));
     }
-
 
     @GetMapping("/category/{category}")
     public ResponseEntity<List<Video>> getVideosByCategory(@PathVariable String category) {
