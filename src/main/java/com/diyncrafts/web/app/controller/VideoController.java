@@ -84,6 +84,22 @@ public class VideoController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/user")
+    @PreAuthorize("hasRole('ROLE_USER')")
+    public ResponseEntity<List<Video>> getAuthenticatedUserVideos() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        
+        // Logging
+        logger.info("User '{}' is retrieving their videos", authentication.getName());
+
+        List<Video> videos = videoService.getAuthenticatedUserVideos(authentication);
+
+        // Logging
+        logger.info("Successfully retrieved {} videos for user '{}'", videos.size(), authentication.getName());
+
+        return ResponseEntity.ok(videos);
+    }
+
     @GetMapping
     public ResponseEntity<List<Video>> getAllVideos() {
         return ResponseEntity.ok(videoService.getAllVideos());

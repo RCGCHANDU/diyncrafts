@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.List;
+
 import javax.imageio.ImageIO;
 
 @Service
@@ -157,6 +158,12 @@ public class VideoDatabaseService {
 
     public List<Video> getAllVideos() {
         return videoRepository.findAll();
+    }
+
+    public List<Video> getAuthenticatedUserVideos(Authentication authentication) {
+        User currentUser = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return videoRepository.findVideosByUser(currentUser.getId());
     }
 
     public Video getVideoById(Long id) {

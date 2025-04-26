@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.diyncrafts.web.app.model.Video;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository("videoRepository")
 public interface VideoRepository extends JpaRepository<Video, Long> {
@@ -21,4 +22,7 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @Transactional
     @Query("UPDATE Video v SET v.viewCount = v.viewCount + 1 WHERE v.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    @Query("SELECT v FROM Video v WHERE v.user.id = :userId")
+    List<Video> findVideosByUser(@Param("userId") UUID userId);
 }

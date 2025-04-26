@@ -54,7 +54,7 @@ public class Video {
     @CollectionTable(name = "video_materials", joinColumns = @JoinColumn(name = "video_id"))
     private List<String> materialsUsed;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "category_id", nullable = true)
     private Category category;
 
