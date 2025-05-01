@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import com.diyncrafts.web.app.dto.CategoryStats;
 import com.diyncrafts.web.app.model.Category;
 import com.diyncrafts.web.app.service.CategoryService;
 
@@ -44,6 +45,17 @@ public class CategoryController {
     public ResponseEntity<Void> deleteCategory(@PathVariable Long id) {
         categoryService.deleteCategory(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<List<CategoryStats>> getCategoryStats() {
+        try {
+            List<CategoryStats> stats = categoryService.getCategoryStats();
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).build();
+        }
     }
 
     @ExceptionHandler

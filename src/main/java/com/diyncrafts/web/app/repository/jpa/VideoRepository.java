@@ -32,4 +32,13 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     @Query("SELECT v FROM Video v WHERE v.uploadDate >= :cutoff ORDER BY v.viewCount DESC")
     Page<Video> findTop5RecentByViewCount(@Param("cutoff") LocalDate cutoff, Pageable pageable);
+
+    @Query("SELECT SUM(v.viewCount) FROM Video v WHERE v.category.id = :categoryId")
+    Integer sumViewsByCategoryId(@Param("categoryId") Long categoryId);
+
+    @Query("SELECT SUM(v.viewCount) FROM Video v WHERE v.category.id = :categoryId AND v.uploadDate BETWEEN :start AND :end")
+    Integer sumViewsBetweenDates(
+            @Param("categoryId") Long categoryId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
 }
