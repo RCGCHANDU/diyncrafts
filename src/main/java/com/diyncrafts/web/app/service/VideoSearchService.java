@@ -1,5 +1,6 @@
 package com.diyncrafts.web.app.service;
 
+import java.util.Collections;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -43,6 +44,9 @@ public class VideoSearchService {
 
     // Multi-field text search
     public List<VideoElasticSearch> searchByText(String searchText) {
+        if (searchText == null || searchText.trim().isEmpty()) {
+            return Collections.emptyList(); // Or throw a custom exception
+        }
         return videoSearchRepository.searchByText(searchText);
     }
 

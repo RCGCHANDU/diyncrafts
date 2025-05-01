@@ -32,9 +32,8 @@ public class VideoController {
     @PostMapping("/create/")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> uploadVideo(
-        @Valid @ModelAttribute VideoMetadata videoMetadata
-    ) throws IOException {
-        
+            @Valid @ModelAttribute VideoMetadata videoMetadata) throws IOException {
+
         // 1. Log that the request was received
         logger.info("Received upload request for video: {}", videoMetadata.getTitle());
 
@@ -52,25 +51,23 @@ public class VideoController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> updateVideo(
-        @PathVariable Long id,
-        @Valid @ModelAttribute VideoMetadata videoMetadata
-    ) throws IOException {
-        
+            @PathVariable Long id,
+            @Valid @ModelAttribute VideoMetadata videoMetadata) throws IOException {
+
         // 1. Log the update request
         logger.info("Received update request for video ID: {}", id);
-        logger.info("Update details: title '{}', category '{}'", 
-        videoMetadata.getTitle(), videoMetadata.getCategory());
-        
+        logger.info("Update details: title '{}', category '{}'",
+                videoMetadata.getTitle(), videoMetadata.getCategory());
+
         // 3. Log authentication details
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         logger.info("User '{}' is updating video ID={}", authentication.getName(), id);
 
         // 4. Perform the update through the service
         Video updatedVideo = videoService.updateVideo(
-            id, 
-            videoMetadata, 
-            authentication
-        );
+                id,
+                videoMetadata,
+                authentication);
 
         // 5. Log success and return response
         logger.info("Video updated successfully: ID={}", updatedVideo.getId());
@@ -88,7 +85,7 @@ public class VideoController {
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<List<Video>> getAuthenticatedUserVideos() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        
+
         // Logging
         logger.info("User '{}' is retrieving their videos", authentication.getName());
 
@@ -121,10 +118,16 @@ public class VideoController {
         return ResponseEntity.ok(videoService.getVideosByDifficultyLevel(difficultyLevel));
     }
 
+    @GetMapping("/trending")
+    public ResponseEntity<List<Video>> getTrendingVideos() {
+        List<Video> trendingVideos = videoService.getTrendingVideos();
+        return ResponseEntity.ok(trendingVideos);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> handleGeneralException(Exception e) {
         logger.error("An unexpected error occurred: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                             .body("An unexpected error occurred: " + e.getMessage());
+                .body("An unexpected error occurred: " + e.getMessage());
     }
 }

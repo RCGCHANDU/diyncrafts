@@ -2,6 +2,8 @@ package com.diyncrafts.web.app.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,7 +42,7 @@ public class VideoDatabaseService {
 
     @Autowired
     private VideoS3StorageService storageService;
-    
+
     @Autowired
     private ThumbnailService thumbnailService;
 
@@ -64,15 +66,14 @@ public class VideoDatabaseService {
         Video video = new Video();
         video.setVideoUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, video.getTitle()));
 
-
         // Handle thumbnail
         if (thumbnailFile != null && !thumbnailFile.isEmpty()) {
             storageService.uploadFile(
-                thumbnailFile.getInputStream(),
-                thumbnailFile.getSize(),
-                thumbnailFile.getOriginalFilename()
-            );
-            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
+                    thumbnailFile.getInputStream(),
+                    thumbnailFile.getSize(),
+                    thumbnailFile.getOriginalFilename());
+            video.setThumbnailUrl(
+                    String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
         } else {
             BufferedImage thumbnail = thumbnailService.extractThumbnail(videoFile.getBytes());
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -81,7 +82,8 @@ public class VideoDatabaseService {
             // Convert byte array to InputStream
             InputStream thumbnailInputStream = new ByteArrayInputStream(thumbnailBytes);
             storageService.uploadFile(thumbnailInputStream, thumbnailBytes.length, "image/jpeg");
-            video.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s_thumbnail", bucketName, video.getTitle() ));
+            video.setThumbnailUrl(
+                    String.format("https://%s.s3.amazonaws.com/%s_thumbnail", bucketName, video.getTitle()));
         }
 
         User currentUser = userRepository.findByUsername(authentication.getName())
@@ -107,18 +109,17 @@ public class VideoDatabaseService {
     }
 
     public Video updateVideo(
-        Long id, 
-        VideoMetadata request, 
-        Authentication authentication
-    ) throws IOException {
-        
+            Long id,
+            VideoMetadata request,
+            Authentication authentication) throws IOException {
+
         // 1. Retrieve existing video
         Video existingVideo = videoRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Video not found"));
+                .orElseThrow(() -> new RuntimeException("Video not found"));
 
         // 2. Check ownership
         User currentUser = userRepository.findByUsername(authentication.getName())
-            .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!existingVideo.getUser().equals(currentUser)) {
             throw new RuntimeException("Unauthorized to update this video");
@@ -140,11 +141,11 @@ public class VideoDatabaseService {
         // Handle thumbnail
         if (thumbnailFile != null) {
             storageService.uploadFile(
-                thumbnailFile.getInputStream(),
-                thumbnailFile.getSize(),
-                thumbnailFile.getOriginalFilename()
-            );
-            existingVideo.setThumbnailUrl(String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
+                    thumbnailFile.getInputStream(),
+                    thumbnailFile.getSize(),
+                    thumbnailFile.getOriginalFilename());
+            existingVideo.setThumbnailUrl(
+                    String.format("https://%s.s3.amazonaws.com/%s", bucketName, thumbnailFile.getOriginalFilename()));
         }
 
         // 6. Save changes and update search index
@@ -170,6 +171,7 @@ public class VideoDatabaseService {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
         videoRepository.incrementViewCount(video.getId());
+        videoRepository.save(video);
         return video;
     }
 
@@ -187,5 +189,12 @@ public class VideoDatabaseService {
 
     public List<Video> getVideosByDifficultyLevel(String difficultyLevel) {
         return videoRepository.findByDifficultyLevel(difficultyLevel);
+    }
+
+    public List<Video> getTrendingVideos() {
+        LocalDate cutoff = LocalDate.now().minusDays(7);
+        Pageable top5 = PageRequest.of(0, 5); // Top 5 results
+
+        return videoRepository.findTop5RecentByViewCount(cutoff, top5).getContent();
     }
 }
