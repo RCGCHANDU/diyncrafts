@@ -15,6 +15,15 @@ public class VideoElasticSearch {
     private String categoryName; 
     private String userName; 
     private List<String> materialsUsed;
+    private String thumbnailUrl;
+
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
+    }
 
     public void syncWithVideoEntity(Video video) {
         this.id = video.getId();
@@ -23,6 +32,7 @@ public class VideoElasticSearch {
         this.difficultyLevel = video.getDifficultyLevel();
         this.categoryName = video.getCategory() != null ? video.getCategory().getName() : null;
         this.userName = video.getUser().getUsername();
+        this.thumbnailUrl = video.getThumbnailUrl();
         this.materialsUsed = video.getMaterialsUsed();
     }
 
