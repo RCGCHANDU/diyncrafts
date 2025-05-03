@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Task;
 import com.diyncrafts.web.app.model.TaskStatus;
+import com.diyncrafts.web.app.model.Video;
 import com.diyncrafts.web.app.repository.jpa.TaskRepository;
 
 import org.springframework.amqp.core.AmqpTemplate;
@@ -80,8 +81,8 @@ public class VideoUploadService {
         }
     }
 
-    public Long createVideo(VideoMetadata videoMetadata, Authentication authentication) throws IOException {
-        return videoDatabaseService.createVideo(videoMetadata, authentication).getId();
+    public Video createVideo(VideoMetadata videoMetadata, Authentication authentication) throws IOException {
+        return videoDatabaseService.createVideo(videoMetadata, authentication);
     }
 
     public Task getTask(String taskId) {

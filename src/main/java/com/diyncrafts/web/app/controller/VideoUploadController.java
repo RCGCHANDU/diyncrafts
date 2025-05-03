@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.diyncrafts.web.app.dto.VideoAndTaskResponse;
 import com.diyncrafts.web.app.dto.VideoMetadata;
 import com.diyncrafts.web.app.model.Task;
+import com.diyncrafts.web.app.model.Video;
 import com.diyncrafts.web.app.service.VideoUploadService;
 
 import jakarta.validation.Valid;
@@ -33,16 +35,22 @@ public class VideoUploadController {
 
     @PostMapping("/upload")
     @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Task> upload(
-        @RequestParam("videoFile") MultipartFile file,
-        @Valid @ModelAttribute VideoMetadata videoUploadRequest
-        ) throws IOException {
+    public ResponseEntity<VideoAndTaskResponse> upload(
+            @RequestParam("videoFile") MultipartFile file,
+            @Valid @ModelAttribute VideoMetadata videoUploadRequest) throws IOException {
+
         videoUploadRequest.setVideoFile(file);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Long videoId = videoUploadService.createVideo(videoUploadRequest, authentication);
-        String taskId = taskService.initiateTranscoding(file, videoId);
 
-        return ResponseEntity.ok(taskService.getTask(taskId));
+        Video video = videoUploadService.createVideo(videoUploadRequest, authentication);
+        String taskId = taskService.initiateTranscoding(file, video.getId());
+        Task task = taskService.getTask(taskId); // Optional: fetch full task details
+
+        VideoAndTaskResponse videoAndTaskResponse = new VideoAndTaskResponse();
+        videoAndTaskResponse.setVideo(video);
+        videoAndTaskResponse.setTask(task);
+
+        return ResponseEntity.ok(videoAndTaskResponse);
     }
 
     @GetMapping("/status/{taskId}")
