@@ -34,6 +34,12 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/admin/login")
+    public ResponseEntity<?> adminLogin(@RequestBody LoginRequest loginRequest) {
+        AuthenticationResponse response = authService.authenticateAdmin(loginRequest);
+        return ResponseEntity.ok(response);
+    }
+
     @ExceptionHandler
     public ResponseEntity<ProblemDetail> authExceptionHandler(Exception e) {
         ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);

@@ -92,4 +92,49 @@ public class AuthService {
         }
     }
 
+    public AuthenticationResponse authenticateAdmin(LoginRequest loginRequest) {
+        try {
+            UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getUsername());
+    
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails.getUsername(),
+                    loginRequest.getPassword(),
+                    userDetails.getAuthorities()
+            );
+    
+            authenticationManager.authenticate(authentication);
+            String username = authentication.getName();
+    
+            // Fetch full user details from the repository
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+    
+            // Enforce admin role
+            if (!user.getRole().equals(ERole.ROLE_ADMIN)) {
+                throw new IllegalArgumentException("Access denied: Admin role required");
+            }
+    
+            // Generate JWT token
+            String token = jwtTokenProvider.generateToken(username);
+    
+            // Return authentication response
+            return new AuthenticationResponse(
+                    token,
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getRole().name()
+            );
+    
+        } catch (BadCredentialsException e) {
+            throw new IllegalArgumentException("Invalid username or password", e);
+        } catch (DisabledException e) {
+            throw new IllegalArgumentException("User account is disabled", e);
+        } catch (LockedException e) {
+            throw new IllegalArgumentException("User account is locked", e);
+        } catch (UsernameNotFoundException e) {
+            throw new IllegalArgumentException("User not found", e);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
 }
