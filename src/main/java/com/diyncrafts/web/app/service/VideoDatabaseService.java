@@ -192,7 +192,7 @@ public class VideoDatabaseService {
     }
 
     public List<Video> getTrendingVideos() {
-        LocalDate cutoff = LocalDate.now().minusDays(7);
+        LocalDate cutoff = LocalDate.now().minusDays(30);
         Pageable top5 = PageRequest.of(0, 5); // Top 5 results
 
         return videoRepository.findTop5RecentByViewCount(cutoff, top5).getContent();

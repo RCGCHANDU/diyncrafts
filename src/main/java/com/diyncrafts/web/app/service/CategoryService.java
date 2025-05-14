@@ -73,8 +73,8 @@ public class CategoryService {
         List<CategoryStats> stats = new ArrayList<>();
 
         LocalDate now = LocalDate.now();
-        LocalDate lastWeek = now.minusDays(7);
-        LocalDate twoWeeksAgo = now.minusDays(14);
+        LocalDate lastWeek = now.minusDays(15);
+        LocalDate twoWeeksAgo = now.minusDays(30);
 
         for (Category category : categories) {
             Long categoryId = category.getId();
