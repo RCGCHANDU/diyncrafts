@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.diyncrafts.web.app.dto.GuideCreateRequest;
 import com.diyncrafts.web.app.dto.GuideUpdateRequest;
 import com.diyncrafts.web.app.model.Guide;
+import com.diyncrafts.web.app.model.Video;
 import com.diyncrafts.web.app.service.GuideService;
 
 import jakarta.validation.Valid;
@@ -27,6 +28,18 @@ public class GuideController {
 
     public GuideController(GuideService guideService) {
         this.guideService = guideService;
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("hasRole('ROLE_USER')")
+    public ResponseEntity<List<Guide>> getAuthenticatedUserGuides() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+
+        List<Guide> guides = guideService.getAuthenticatedUserGuides(authentication);
+
+
+        return ResponseEntity.ok(guides);
     }
 
     // Create Guide

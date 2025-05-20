@@ -115,6 +115,12 @@ public class GuideService {
         return guideRepository.findAll(limit, offset); // Order: limit first, offset second
     }
 
+    public List<Guide> getAuthenticatedUserGuides(Authentication authentication) {
+        User currentUser = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return guideRepository.findGuidesByUser(currentUser.getId());
+    }
+
     @Transactional
     public void deleteGuide(Long id) {
         Guide guide = guideRepository.findById(id)

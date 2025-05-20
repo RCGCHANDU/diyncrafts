@@ -1,6 +1,8 @@
 package com.diyncrafts.web.app.repository.jpa;
 
 import java.util.List;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +22,9 @@ public interface GuideRepository extends JpaRepository<Guide, Long> {
         @Param("offset") int offset,
         @Param("limit") int limit
     );
+
+    @Query("SELECT g FROM Guide g WHERE g.user.id = :userId")
+    List<Guide> findGuidesByUser(@Param("userId") UUID userId);
 
     @Query(value = "SELECT * FROM guide ORDER BY id ASC LIMIT ?1 OFFSET ?2", nativeQuery = true)
     List<Guide> findAll(int limit, int offset); // Order: limit first, offset second
