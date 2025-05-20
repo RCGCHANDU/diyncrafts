@@ -2,10 +2,17 @@ package com.diyncrafts.web.app.service;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 
 import com.diyncrafts.web.app.model.VideoElasticSearch;
 import com.diyncrafts.web.app.repository.es.VideoElasticSearchRepository;
+
+import co.elastic.clients.elasticsearch._types.query_dsl.QueryBuilders;
 
 
 @Service
@@ -66,14 +73,6 @@ public class VideoSearchService {
             String difficulty, 
             String material) {
         
-        // Implement custom logic combining multiple criteria
-        // For simplicity, call existing methods here
-        if (category != null) {
-            return searchByCategory(category);
-        } else if (material != null) {
-            return searchByMaterial(material);
-        } else {
-            return searchByText(searchText);
-        }
+        return videoSearchRepository.advancedSearch(searchText, category, difficulty);
     }
 }

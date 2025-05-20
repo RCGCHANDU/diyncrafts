@@ -20,6 +20,9 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
     @Query("SELECT v FROM Video v JOIN v.category c WHERE c.name = :categoryName")
     List<Video> findByCategoryName(@Param("categoryName") String categoryName);
 
+    @Query("SELECT v FROM Video v WHERE v.category.name IN :categoryNames")
+    List<Video> findByCategoryNames(@Param("categoryNames") List<String> categoryNames);
+
     List<Video> findByDifficultyLevel(String difficultyLevel);
 
     @Modifying
