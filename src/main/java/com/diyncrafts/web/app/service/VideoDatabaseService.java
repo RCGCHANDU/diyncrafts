@@ -2,6 +2,7 @@ package com.diyncrafts.web.app.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -170,7 +171,6 @@ public class VideoDatabaseService {
     public Video getVideoById(Long id) {
         Video video = videoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Video not found"));
-        videoRepository.incrementViewCount(video.getId());
         videoRepository.save(video);
         return video;
     }
@@ -196,5 +196,13 @@ public class VideoDatabaseService {
         Pageable top5 = PageRequest.of(0, 5); // Top 5 results
 
         return videoRepository.findTop5RecentByViewCount(cutoff, top5).getContent();
+    }
+
+    public void logView(Long videoId) {
+        videoRepository.incrementViewCount(videoId);
+    }
+
+    public Page<Video> getPaginatedVideos(Pageable pageable) {
+        return videoRepository.findAll(pageable);
     }
 }

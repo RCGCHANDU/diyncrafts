@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/videos").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/editor-pick").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/videos/{id}/log-view").permitAll()
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws").permitAll()

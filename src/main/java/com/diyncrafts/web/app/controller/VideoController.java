@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -98,14 +100,23 @@ public class VideoController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Video>> getAllVideos() {
-        return ResponseEntity.ok(videoService.getAllVideos());
+    public Page<Video> getAllVideos(
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "12") int size,
+        Pageable pageable) {
+        return videoService.getPaginatedVideos(pageable);
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ROLE_USER')")
     public ResponseEntity<Video> getVideoById(@PathVariable Long id) {
         return ResponseEntity.ok(videoService.getVideoById(id));
+    }
+
+    @PostMapping("/{id}/log-view")
+    public ResponseEntity<?> logView(@PathVariable Long id) {
+        videoService.logView(id);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/category/{category}")

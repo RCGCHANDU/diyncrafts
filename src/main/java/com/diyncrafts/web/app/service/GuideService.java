@@ -112,7 +112,7 @@ public class GuideService {
     }
 
     public List<Guide> getGuides(int offset, int limit) {
-        return guideRepository.findAll(limit, offset); // Order: limit first, offset second
+        return guideRepository.findAll(); // Order: limit first, offset second
     }
 
     public List<Guide> getAuthenticatedUserGuides(Authentication authentication) {
