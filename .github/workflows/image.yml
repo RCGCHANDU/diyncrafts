@@ -91,7 +91,7 @@ jobs:
             --ignorefile /src/.trivyignore "$REF"
 
       - name: SBOM (SPDX)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.ref.outputs.scan != '' }}
         env:
           REF: ${{ steps.ref.outputs.scan }}
           TRIVY_USERNAME: ${{ github.actor }}
@@ -102,7 +102,7 @@ jobs:
             --format spdx-json --output /out/sbom.spdx.json "$REF"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.ref.outputs.scan != '' }}
         with:
           name: backend-sbom
           path: ${{ runner.temp }}/sbom.spdx.json

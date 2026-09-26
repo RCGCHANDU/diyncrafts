@@ -84,6 +84,20 @@ the next backend deploy, or through a manual run of the backend's deploy workflo
 Images in GHCR are private by default for private repositories. Either make the two packages
 public, or log the deploy user in once with a token limited to `read:packages`.
 
+**Letting CI create the packages (one-time, MANUAL OPERATOR ACTION).** The first publish from `main`
+fails with `denied: installation not allowed to Create organization package` when the account's
+settings do not let GitHub Actions create packages. Choose one:
+
+- In the account's or organization's **Settings → Packages**, allow package creation for the
+  visibility you want. Then re-run the failed CI run on `main`.
+- Or create each package once by hand. Push any image to `ghcr.io/rcgchandu/diyncrafts` and to
+  `ghcr.io/rcgchandu/diyncrafts-frontend` with a personal token that has `write:packages`. Then, in
+  each package's **Package settings → Manage Actions access**, add its repository with the
+  **Write** role, and re-run CI.
+
+After that, `GITHUB_TOKEN` (granted `packages: write` only in the publish job) can push new
+versions. No long-lived token is stored in the repository.
+
 ### OIDC instead of static cloud keys
 
 The reference target (a VM reached over SSH) needs no cloud credentials in GitHub. When a cloud
