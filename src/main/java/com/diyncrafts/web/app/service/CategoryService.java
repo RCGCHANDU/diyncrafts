@@ -1,104 +1,98 @@
 package com.diyncrafts.web.app.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-
-import com.diyncrafts.web.app.dto.CategoryStats;
-import com.diyncrafts.web.app.model.Category;
-import com.diyncrafts.web.app.repository.jpa.CategoryRepository;
-import com.diyncrafts.web.app.repository.jpa.VideoRepository;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.diyncrafts.web.app.dto.CategoryRequest;
+import com.diyncrafts.web.app.dto.CategoryResponse;
+import com.diyncrafts.web.app.dto.CategoryStats;
+import com.diyncrafts.web.app.dto.CategoryUpdateRequest;
+import com.diyncrafts.web.app.exceptions.ConflictException;
+import com.diyncrafts.web.app.exceptions.ResourceNotFoundException;
+import com.diyncrafts.web.app.model.Category;
+import com.diyncrafts.web.app.repository.jpa.CategoryRepository;
+import com.diyncrafts.web.app.repository.jpa.VideoRepository;
+
 @Service
 public class CategoryService {
 
-    @Autowired
-    private CategoryRepository categoryRepository;
+    private final CategoryRepository categoryRepository;
+    private final VideoRepository videoRepository;
 
-    @Autowired
-    private VideoRepository videoRepository;
-
-    // Create category with uniqueness check
-    @Transactional
-    public Category createCategory(Category category) {
-        if (categoryRepository.existsByName(category.getName())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists");
-        }
-        return categoryRepository.save(category);
+    public CategoryService(CategoryRepository categoryRepository, VideoRepository videoRepository) {
+        this.categoryRepository = categoryRepository;
+        this.videoRepository = videoRepository;
     }
 
-    // Update category with null-safe field updates
     @Transactional
-    public Category updateCategory(Long id, Category updatedCategory) {
-        Category existingCategory = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    public CategoryResponse createCategory(CategoryRequest request) {
+        String name = request.name().trim();
+        if (categoryRepository.existsByName(name)) {
+            throw new ConflictException("Category name already exists.");
+        }
+        Category category = new Category();
+        category.setName(name);
+        category.setDescription(request.description());
+        return CategoryResponse.from(categoryRepository.save(category));
+    }
 
-        if (updatedCategory.getName() != null) {
-            if (!existingCategory.getName().equals(updatedCategory.getName()) &&
-                    categoryRepository.existsByName(updatedCategory.getName())) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Category name already exists");
+    @Transactional
+    public CategoryResponse updateCategory(Long id, CategoryUpdateRequest request) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found."));
+        if (request.name() != null) {
+            String name = request.name().trim();
+            if (!category.getName().equals(name) && categoryRepository.existsByName(name)) {
+                throw new ConflictException("Category name already exists.");
             }
-            existingCategory.setName(updatedCategory.getName());
+            category.setName(name);
         }
-
-        if (updatedCategory.getDescription() != null) {
-            existingCategory.setDescription(updatedCategory.getDescription());
+        if (request.description() != null) {
+            category.setDescription(request.description());
         }
-
-        return categoryRepository.save(existingCategory);
+        return CategoryResponse.from(category);
     }
 
-    // Delete category with existence check
     @Transactional
     public void deleteCategory(Long id) {
         if (!categoryRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found");
+            throw new ResourceNotFoundException("Category not found.");
+        }
+        if (videoRepository.existsByCategoryId(id)) {
+            throw new ConflictException("Category is still assigned to videos.");
         }
         categoryRepository.deleteById(id);
     }
 
-    // Get all categories
-    public List<Category> getAllCategories() {
-        return categoryRepository.findAll();
+    @Transactional(readOnly = true)
+    public List<CategoryResponse> getAllCategories() {
+        return categoryRepository.findAll(Sort.by("name")).stream().map(CategoryResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<CategoryStats> getCategoryStats() {
-        List<Category> categories = categoryRepository.findAll();
         List<CategoryStats> stats = new ArrayList<>();
-
         LocalDate now = LocalDate.now();
         LocalDate lastWeek = now.minusDays(15);
         LocalDate twoWeeksAgo = now.minusDays(30);
-
-        for (Category category : categories) {
+        for (Category category : categoryRepository.findAll(Sort.by("id"))) {
             Long categoryId = category.getId();
-
-            Integer totalViews = videoRepository.sumViewsByCategoryId(categoryId);
-            int total = (totalViews != null) ? totalViews : 0;
-
-            Integer recentViews = videoRepository.sumViewsBetweenDates(categoryId, lastWeek, now);
-            int recent = (recentViews != null) ? recentViews : 0;
-
-            Integer previousViews = videoRepository.sumViewsBetweenDates(categoryId, twoWeeksAgo, lastWeek);
-            int previous = (previousViews != null) ? previousViews : 0;
-
-            double growth;
-            if (previous == 0) {
-                growth = 100.0; // Avoid division by zero
-            } else {
-                growth = ((double) (recent - previous) / previous) * 100;
-                growth = Math.round(growth * 100.0) / 100.0; // Round to 2 decimal places
-            }
-
-            stats.add(new CategoryStats(categoryId.intValue(), total, growth));
+            long total = nullToZero(videoRepository.sumViewsByCategoryId(categoryId));
+            long recent = nullToZero(videoRepository.sumViewsBetweenDates(categoryId, lastWeek, now));
+            long previous = nullToZero(videoRepository.sumViewsBetweenDates(categoryId, twoWeeksAgo, lastWeek));
+            double growth = previous == 0 ? 100.0
+                    : Math.round(((double) (recent - previous) / previous) * 100 * 100.0) / 100.0;
+            stats.add(new CategoryStats(categoryId, total, growth));
         }
-
         return stats;
+    }
+
+    private static long nullToZero(Long value) {
+        return value == null ? 0 : value;
     }
 }

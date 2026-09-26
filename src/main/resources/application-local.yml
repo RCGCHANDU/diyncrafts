@@ -1,0 +1,15 @@
+# Local development against docker-compose.yml. These credentials only exist in the throwaway
+# local containers; never reuse them anywhere else.
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/diyncraftshub
+    username: diyncrafts
+    password: diyncrafts-local
+  rabbitmq:
+    username: diyncrafts
+    password: diyncrafts-local
+
+app:
+  websocket:
+    relay:
+      enabled: true

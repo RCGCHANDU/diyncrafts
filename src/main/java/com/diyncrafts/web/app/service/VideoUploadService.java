@@ -1,19 +1,5 @@
 package com.diyncrafts.web.app.service;
 
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.Authentication;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
-import com.diyncrafts.web.app.dto.VideoMetadata;
-import com.diyncrafts.web.app.model.Task;
-import com.diyncrafts.web.app.model.TaskStatus;
-import com.diyncrafts.web.app.model.Video;
-import com.diyncrafts.web.app.repository.jpa.TaskRepository;
-
-import org.springframework.amqp.core.AmqpTemplate;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -21,71 +7,96 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.diyncrafts.web.app.dto.TaskResponse;
+import com.diyncrafts.web.app.dto.VideoAndTaskResponse;
+import com.diyncrafts.web.app.dto.VideoResponse;
+import com.diyncrafts.web.app.dto.VideoUploadRequest;
+import com.diyncrafts.web.app.exceptions.InvalidRequestException;
+import com.diyncrafts.web.app.exceptions.ResourceNotFoundException;
+import com.diyncrafts.web.app.model.Task;
+import com.diyncrafts.web.app.model.TaskStatus;
+import com.diyncrafts.web.app.model.User;
+import com.diyncrafts.web.app.model.Video;
+import com.diyncrafts.web.app.repository.jpa.TaskRepository;
+import com.diyncrafts.web.app.repository.jpa.VideoRepository;
+import com.diyncrafts.web.app.security.AccessGuard;
+
 @Service
 public class VideoUploadService {
 
-    @Value("${file.upload.path}")
-    private String uploadPath;
+    private final String uploadPath;
+    private final TaskRepository taskRepository;
+    private final VideoRepository videoRepository;
+    private final VideoService videoService;
+    private final AmqpTemplate rabbitTemplate;
+    private final AccessGuard accessGuard;
 
-    @Autowired
-    private TaskRepository taskRepository;
+    public VideoUploadService(@Value("${file.upload.path}") String uploadPath, TaskRepository taskRepository,
+            VideoRepository videoRepository, VideoService videoService, AmqpTemplate rabbitTemplate,
+            AccessGuard accessGuard) {
+        this.uploadPath = uploadPath;
+        this.taskRepository = taskRepository;
+        this.videoRepository = videoRepository;
+        this.videoService = videoService;
+        this.rabbitTemplate = rabbitTemplate;
+        this.accessGuard = accessGuard;
+    }
 
-    @Autowired
-    private VideoDatabaseService videoDatabaseService;
+    public VideoAndTaskResponse upload(VideoUploadRequest request, Authentication authentication) throws IOException {
+        if (request.videoFile() == null || request.videoFile().isEmpty()) {
+            throw new InvalidRequestException("videoFile is required and must not be empty.");
+        }
+        Video video = videoService.createVideo(request, authentication);
+        String taskId = initiateTranscoding(request.videoFile(), video.getId());
+        Task task = taskRepository.findById(taskId).orElse(null);
+        return new VideoAndTaskResponse(VideoResponse.from(video), TaskResponse.from(task));
+    }
 
-    @Autowired
-    private AmqpTemplate rabbitTemplate; // For sending to RabbitMQ
+    @Transactional(readOnly = true)
+    public TaskResponse getTask(String taskId, Authentication authentication) {
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Task not found."));
+        // Tasks created before video ids were recorded have no owner and are visible to admins only.
+        User owner = task.getVideoId() == null ? null
+                : videoRepository.findById(task.getVideoId()).map(Video::getUser).orElse(null);
+        accessGuard.requireOwnerOrAdmin(owner, authentication, "task");
+        return TaskResponse.from(task);
+    }
 
-    public String initiateTranscoding(MultipartFile file, Long videoId) {
+    private String initiateTranscoding(MultipartFile file, Long videoId) {
         String taskId = UUID.randomUUID().toString();
-
-        // 1. Save the uploaded file to a temporary directory
         String inputDir = uploadPath + taskId;
         String inputPath = inputDir + "/input.mp4";
-
         try {
-            // Create directory if it doesn't exist
             File dir = new File(inputDir);
             if (!dir.mkdirs() && !dir.isDirectory()) {
                 throw new IOException("Failed to create directory: " + inputDir);
             }
+            file.transferTo(new File(inputPath));
 
-            // Save the uploaded file
-            File inputFile = new File(inputPath);
-            file.transferTo(inputFile);
-
-            // 2. Create the Task entity
             Task task = new Task();
             task.setTaskId(taskId);
             task.setStatus(TaskStatus.QUEUED);
             task.setProgress(0.0);
             task.setStartTime(LocalDateTime.now());
             task.setInputPath(inputPath);
-            task.setOutputLocation(null);
-            task.setErrorDetails(null);
-
-            // 3. Save the task to the database
+            task.setVideoId(videoId);
             taskRepository.save(task);
 
             Map<String, Object> message = new HashMap<>();
             message.put("taskId", taskId);
             message.put("videoId", videoId);
-
-            // 4. Send the task ID to the RabbitMQ queue
             rabbitTemplate.convertAndSend("transcoding.queue", message);
-
             return taskId;
-        } catch (IOException | RuntimeException e) {
-            // Handle errors (e.g., cleanup, logging)
-            throw new RuntimeException("Failed to initiate transcoding: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to initiate transcoding", e);
         }
-    }
-
-    public Video createVideo(VideoMetadata videoMetadata, Authentication authentication) throws IOException {
-        return videoDatabaseService.createVideo(videoMetadata, authentication);
-    }
-
-    public Task getTask(String taskId) {
-        return taskRepository.findById(taskId).orElse(null);
     }
 }

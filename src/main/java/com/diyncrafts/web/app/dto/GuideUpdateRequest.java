@@ -1,24 +1,9 @@
 package com.diyncrafts.web.app.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-public class GuideUpdateRequest {
-    @NotBlank
-    private String title;
-    @NotBlank
-    private String content;
-    
-    public String getTitle() {
-        return title;
-    }
-    public void setTitle(String title) {
-        this.title = title;
-    }
-    public String getContent() {
-        return content;
-    }
-    public void setContent(String content) {
-        this.content = content;
-    }
-    
+public record GuideUpdateRequest(
+        @NotBlank @Size(max = 255) String title,
+        @NotBlank @Size(max = 60_000) String content) {
 }

@@ -1,38 +1,38 @@
 package com.diyncrafts.web.app.model;
 
-
-import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
-
-import java.util.Collection;
-import java.util.Collections;
 import java.util.UUID;
 
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 
-
-@Data
+/**
+ * Application user. Never serialize this entity directly: it holds the password hash.
+ */
+@Getter
+@Setter
 @Entity
 @Table(name = "user_account")
-public class User implements UserDetails{
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(updatable = false, nullable = false)
     private UUID id;
 
-    @NotBlank(message = "Username is required")
     @Column(unique = true, nullable = false)
     private String username;
 
-    @NotBlank(message = "Password is required")
     @Column(nullable = false)
     private String password;
 
-    @NotBlank(message = "Email is required")
     @Column(nullable = false)
     private String email;
 
@@ -48,7 +48,7 @@ public class User implements UserDetails{
     }
 
     @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.singletonList(new SimpleGrantedAuthority(role.name()));
+    public String toString() {
+        return "User[id=" + id + ", username=" + username + "]";
     }
 }

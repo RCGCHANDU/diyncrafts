@@ -1,9 +1,6 @@
 package com.diyncrafts.web.app.controller;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,37 +11,34 @@ import com.diyncrafts.web.app.dto.LoginRequest;
 import com.diyncrafts.web.app.dto.RegisterRequest;
 import com.diyncrafts.web.app.service.AuthService;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
+    /**
+     * Keeps the historical plain-text success body for client compatibility.
+     */
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterRequest registerRequest) {
-        return ResponseEntity.ok(authService.register(registerRequest));
+    public ResponseEntity<String> register(@Valid @RequestBody RegisterRequest request) {
+        authService.register(request);
+        return ResponseEntity.ok("User registered successfully");
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
-        AuthenticationResponse response = authService.login(loginRequest);
-        return ResponseEntity.ok(response);
+    public AuthenticationResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
     }
 
     @PostMapping("/admin/login")
-    public ResponseEntity<?> adminLogin(@RequestBody LoginRequest loginRequest) {
-        AuthenticationResponse response = authService.authenticateAdmin(loginRequest);
-        return ResponseEntity.ok(response);
-    }
-
-    @ExceptionHandler
-    public ResponseEntity<ProblemDetail> authExceptionHandler(Exception e) {
-        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        problemDetail.setTitle("Invalid request");
-        problemDetail.setDetail(e.getMessage());
-        return new ResponseEntity<>(problemDetail, HttpStatus.BAD_REQUEST);
+    public AuthenticationResponse adminLogin(@Valid @RequestBody LoginRequest request) {
+        return authService.authenticateAdmin(request);
     }
 }

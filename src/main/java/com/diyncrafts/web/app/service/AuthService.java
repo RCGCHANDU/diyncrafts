@@ -1,140 +1,104 @@
 package com.diyncrafts.web.app.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import java.nio.charset.StandardCharsets;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
-import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.diyncrafts.web.app.dto.AuthenticationResponse;
 import com.diyncrafts.web.app.dto.LoginRequest;
 import com.diyncrafts.web.app.dto.RegisterRequest;
+import com.diyncrafts.web.app.exceptions.ConflictException;
+import com.diyncrafts.web.app.exceptions.InvalidRequestException;
 import com.diyncrafts.web.app.model.User;
 import com.diyncrafts.web.app.model.User.ERole;
 import com.diyncrafts.web.app.repository.jpa.UserRepository;
-import com.diyncrafts.web.app.security.JwtTokenProvider;
+import com.diyncrafts.web.app.security.AccessGuard;
+import com.diyncrafts.web.app.security.JwtService;
 
 @Service
 public class AuthService {
 
-    @Autowired
-    private UserDetailsService userDetailsService;
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final int BCRYPT_MAX_BYTES = 72;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtService jwtService;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-            AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider) {
+            AuthenticationManager authenticationManager, JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
-        this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtService = jwtService;
     }
 
-    public String register(RegisterRequest registerRequest) {
-        if (userRepository.existsByUsername(registerRequest.getUsername())) {
-            throw new RuntimeException("Username already exists");
+    /**
+     * Registers a regular user. The role is always {@link ERole#ROLE_USER}; administrators are
+     * created out of band (see {@code AdminBootstrap}).
+     */
+    @Transactional
+    public User register(RegisterRequest request) {
+        if (request.password().getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES) {
+            throw new InvalidRequestException("Password must not exceed 72 bytes.");
         }
-
+        if (userRepository.existsByUsername(request.username())) {
+            throw new ConflictException("Username already exists.");
+        }
+        if (userRepository.existsByEmail(request.email())) {
+            throw new ConflictException("Email is already registered.");
+        }
         User user = new User();
-        user.setUsername(registerRequest.getUsername());
-        user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+        user.setUsername(request.username());
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setEmail(request.email());
         user.setEnabled(true);
-        user.setEmail(registerRequest.getEmail());
-        user.setRole(ERole.valueOf(registerRequest.getRole()));
-
-        userRepository.save(user);
-
-        return "User registered sucessfully";
+        user.setRole(ERole.ROLE_USER);
+        User saved = userRepository.save(user);
+        log.info("Registered user '{}'", saved.getUsername());
+        return saved;
     }
 
-    public AuthenticationResponse login(LoginRequest loginRequest) {
-        try {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getUsername());
-
-            Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    userDetails.getUsername(),
-                    loginRequest.getPassword(),
-                    userDetails.getAuthorities());
-            authenticationManager.authenticate(authentication);
-            String token = jwtTokenProvider.generateToken(authentication.getName());
-
-            // Retrieve the user from the repository to get all details
-            String username = authentication.getName();
-            User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
-
-            return new AuthenticationResponse(
-                    token,
-                    user.getUsername(),
-                    user.getEmail(),
-                    user.getRole().name());
-
-        } catch (BadCredentialsException e) {
-            throw new IllegalArgumentException("Invalid username or password", e);
-        } catch (DisabledException e) {
-            throw new IllegalArgumentException("User account is disabled", e);
-        } catch (LockedException e) {
-            throw new IllegalArgumentException("User account is locked", e);
-        } catch (UsernameNotFoundException e) {
-            throw new IllegalArgumentException("User not found", e);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("An unexpected error occurred during authentication", e);
-        }
+    @Transactional(readOnly = true)
+    public AuthenticationResponse login(LoginRequest request) {
+        Authentication authentication = authenticate(request);
+        return toResponse(authentication);
     }
 
-    public AuthenticationResponse authenticateAdmin(LoginRequest loginRequest) {
-        try {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getUsername());
-    
-            Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    userDetails.getUsername(),
-                    loginRequest.getPassword(),
-                    userDetails.getAuthorities()
-            );
-    
-            authenticationManager.authenticate(authentication);
-            String username = authentication.getName();
-    
-            // Fetch full user details from the repository
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
-    
-            // Enforce admin role
-            if (!user.getRole().equals(ERole.ROLE_ADMIN)) {
-                throw new IllegalArgumentException("Access denied: Admin role required");
-            }
-    
-            // Generate JWT token
-            String token = jwtTokenProvider.generateToken(username);
-    
-            // Return authentication response
-            return new AuthenticationResponse(
-                    token,
-                    user.getUsername(),
-                    user.getEmail(),
-                    user.getRole().name()
-            );
-    
-        } catch (BadCredentialsException e) {
-            throw new IllegalArgumentException("Invalid username or password", e);
-        } catch (DisabledException e) {
-            throw new IllegalArgumentException("User account is disabled", e);
-        } catch (LockedException e) {
-            throw new IllegalArgumentException("User account is locked", e);
-        } catch (UsernameNotFoundException e) {
-            throw new IllegalArgumentException("User not found", e);
-        } catch (Exception e) {
-            throw new RuntimeException(e.getMessage(), e);
+    /**
+     * Same as {@link #login} but only succeeds for administrators. The issued token is identical in
+     * format; admin rights come from the {@code roles} claim.
+     */
+    @Transactional(readOnly = true)
+    public AuthenticationResponse authenticateAdmin(LoginRequest request) {
+        Authentication authentication = authenticate(request);
+        if (!AccessGuard.isAdmin(authentication)) {
+            log.warn("Non-admin user '{}' attempted admin login", authentication.getName());
+            // Explicit 403: the caller is anonymous at this point, so AccessDeniedException would map to 401.
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required.");
         }
+        return toResponse(authentication);
+    }
+
+    private Authentication authenticate(LoginRequest request) {
+        return authenticationManager.authenticate(
+                UsernamePasswordAuthenticationToken.unauthenticated(request.username(), request.password()));
+    }
+
+    private AuthenticationResponse toResponse(Authentication authentication) {
+        User user = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalStateException("Authenticated user disappeared"));
+        String token = jwtService.issueToken(user.getUsername(), authentication.getAuthorities());
+        return new AuthenticationResponse(token, user.getUsername(), user.getEmail(), user.getRole().name());
     }
 }

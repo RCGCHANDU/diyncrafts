@@ -1,11 +1,10 @@
 package com.diyncrafts.web.app.exceptions;
 
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.http.HttpStatus;
-
-// Custom exception for storage errors
-@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+/**
+ * Object storage (S3) could not complete an operation. Mapped to HTTP 503 without exposing details.
+ */
 public class StorageException extends RuntimeException {
+
     public StorageException(String message, Throwable cause) {
         super(message, cause);
     }

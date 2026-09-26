@@ -1,30 +1,25 @@
 package com.diyncrafts.web.app.model;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 
 
-@Data
+@Getter
+@Setter
 @Entity
 public class Guide {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Title is required")
     @Column(nullable = false)
     private String title;
 
-    @NotBlank(message = "Content is required")
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
@@ -43,12 +38,8 @@ public class Guide {
     @OrderBy("stepNumber ASC")
     private List<Step> steps;
 
-    public static void checkUserOwnership(Guide guide) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String currentUsername = authentication.getName(); // Replace with actual user ID retrieval
-
-        if (!guide.getUser().getUsername().equals(currentUsername)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't own this guide");
-        }
+    @Override
+    public String toString() {
+        return "Guide[id=" + id + ", title=" + title + "]";
     }
 }

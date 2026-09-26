@@ -1,0 +1,65 @@
+# Base configuration. Contains NO credentials: supply them through environment variables
+# (see .env.example and README). Spring maps e.g. SPRING_DATASOURCE_PASSWORD -> spring.datasource.password.
+spring:
+  application:
+    name: diyncrafts
+  datasource:
+    url: jdbc:mysql://localhost:3306/diyncraftshub
+    # username/password: SPRING_DATASOURCE_USERNAME / SPRING_DATASOURCE_PASSWORD
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    web:
+      pageable:
+        default-page-size: 12
+        max-page-size: 100
+  elasticsearch:
+    uris: http://localhost:9200
+    # username/password: SPRING_ELASTICSEARCH_USERNAME / SPRING_ELASTICSEARCH_PASSWORD
+  rabbitmq:
+    host: localhost
+    port: 5672
+    # username/password: SPRING_RABBITMQ_USERNAME / SPRING_RABBITMQ_PASSWORD
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+
+app:
+  jwt:
+    # secret: APP_JWT_SECRET (required, >= 32 characters, e.g. `openssl rand -base64 48`)
+    expiration: 1h
+    issuer: diyncrafts
+  cors:
+    allowed-origins: http://localhost:5173
+  websocket:
+    relay:
+      enabled: false
+
+aws:
+  s3:
+    region: eu-west-2
+    bucketName: diyncrafts-storage
+
+file:
+  upload:
+    path: ${java.io.tmpdir}/diyncrafts/uploads/
+  output:
+    path: ${java.io.tmpdir}/diyncrafts/output
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO

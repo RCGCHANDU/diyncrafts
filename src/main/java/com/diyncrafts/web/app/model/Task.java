@@ -3,6 +3,7 @@ package com.diyncrafts.web.app.model;
 
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
@@ -17,7 +18,16 @@ public class Task {
     private String inputPath;
     private String outputLocation;
     private String errorDetails;
-    // Getters and setters
+    // Video being transcoded; used for ownership checks on the status endpoint.
+    @Column(name = "video_id")
+    private Long videoId;
+
+    public Long getVideoId() {
+        return videoId;
+    }
+    public void setVideoId(Long videoId) {
+        this.videoId = videoId;
+    }
     public String getTaskId() {
         return taskId;
     }

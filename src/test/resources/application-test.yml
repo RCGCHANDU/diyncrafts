@@ -1,0 +1,27 @@
+# Test profile: in-memory database, no external services required.
+spring:
+  datasource:
+    url: jdbc:h2:mem:diyncrafts;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+app:
+  jwt:
+    secret: test-only-secret-not-used-anywhere-else-0123456789
+  websocket:
+    relay:
+      enabled: false
+
+management:
+  health:
+    rabbit:
+      enabled: false
+    elasticsearch:
+      enabled: false

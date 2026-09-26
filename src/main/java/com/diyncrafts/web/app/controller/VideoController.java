@@ -1,144 +1,100 @@
 package com.diyncrafts.web.app.controller;
 
-import jakarta.validation.Valid;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
-import com.diyncrafts.web.app.dto.VideoMetadata;
-import com.diyncrafts.web.app.model.Video;
-import com.diyncrafts.web.app.service.VideoDatabaseService;
-
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
+
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.diyncrafts.web.app.dto.PageResponse;
+import com.diyncrafts.web.app.dto.VideoResponse;
+import com.diyncrafts.web.app.dto.VideoUpdateRequest;
+import com.diyncrafts.web.app.exceptions.InvalidRequestException;
+import com.diyncrafts.web.app.service.VideoService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/videos")
 public class VideoController {
 
-    private final VideoDatabaseService videoService;
+    // Client-controlled sorting is limited to public fields (never e.g. user.password).
+    private static final Set<String> SORTABLE_PROPERTIES = Set.of("id", "title", "uploadDate", "viewCount");
 
-    private static final Logger logger = LoggerFactory.getLogger(VideoController.class);
+    private final VideoService videoService;
 
-    public VideoController(VideoDatabaseService videoService) {
+    public VideoController(VideoService videoService) {
         this.videoService = videoService;
     }
 
-    @PostMapping("/create/")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Video> uploadVideo(
-            @Valid @ModelAttribute VideoMetadata videoMetadata) throws IOException {
-
-        // 1. Log that the request was received
-        logger.info("Received upload request for video: {}", videoMetadata.getTitle());
-
-        // 3. Log authentication details (to confirm security context)
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        logger.info("User '{}' is attempting to create a video", authentication.getName());
-
-        // 4. Log before returning the response
-        Video uploadedVideo = videoService.createVideo(videoMetadata, authentication);
-        logger.info("Video uploaded successfully: ID={}", uploadedVideo.getId());
-
-        return ResponseEntity.ok(uploadedVideo);
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Video> updateVideo(
-            @PathVariable Long id,
-            @Valid @ModelAttribute VideoMetadata videoMetadata) throws IOException {
-
-        // 1. Log the update request
-        logger.info("Received update request for video ID: {}", id);
-        logger.info("Update details: title '{}', category '{}'",
-                videoMetadata.getTitle(), videoMetadata.getCategory());
-
-        // 3. Log authentication details
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        logger.info("User '{}' is updating video ID={}", authentication.getName(), id);
-
-        // 4. Perform the update through the service
-        Video updatedVideo = videoService.updateVideo(
-                id,
-                videoMetadata,
-                authentication);
-
-        // 5. Log success and return response
-        logger.info("Video updated successfully: ID={}", updatedVideo.getId());
-        return ResponseEntity.ok(updatedVideo);
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Void> deleteVideo(@PathVariable Long id) {
-        videoService.deleteVideo(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/user")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<List<Video>> getAuthenticatedUserVideos() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // Logging
-        logger.info("User '{}' is retrieving their videos", authentication.getName());
-
-        List<Video> videos = videoService.getAuthenticatedUserVideos(authentication);
-
-        // Logging
-        logger.info("Successfully retrieved {} videos for user '{}'", videos.size(), authentication.getName());
-
-        return ResponseEntity.ok(videos);
-    }
-
     @GetMapping
-    public Page<Video> getAllVideos(
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "12") int size,
-        Pageable pageable) {
-        return videoService.getPaginatedVideos(pageable);
+    public PageResponse<VideoResponse> getAllVideos(Pageable pageable) {
+        return videoService.getVideos(withSafeSort(pageable));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<Video> getVideoById(@PathVariable Long id) {
-        return ResponseEntity.ok(videoService.getVideoById(id));
+    public VideoResponse getVideoById(@PathVariable Long id) {
+        return videoService.getVideo(id);
+    }
+
+    @GetMapping("/user")
+    public List<VideoResponse> getAuthenticatedUserVideos(Authentication authentication) {
+        return videoService.getVideosOf(authentication);
+    }
+
+    @PutMapping(path = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VideoResponse updateVideo(@PathVariable Long id, @Valid @ModelAttribute VideoUpdateRequest request,
+            Authentication authentication) throws IOException {
+        return videoService.updateVideo(id, request, authentication);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteVideo(@PathVariable Long id, Authentication authentication) {
+        videoService.deleteVideo(id, authentication);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/log-view")
-    public ResponseEntity<?> logView(@PathVariable Long id) {
+    public ResponseEntity<Void> logView(@PathVariable Long id) {
         videoService.logView(id);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/category/{category}")
-    public ResponseEntity<List<Video>> getVideosByCategory(@PathVariable String category) {
-        return ResponseEntity.ok(videoService.getVideosByCategory(category));
+    public List<VideoResponse> getVideosByCategory(@PathVariable String category) {
+        return videoService.getVideosByCategory(category);
     }
 
     @GetMapping("/difficulty/{difficultyLevel}")
-    public ResponseEntity<List<Video>> getVideosByDifficultyLevel(@PathVariable String difficultyLevel) {
-        return ResponseEntity.ok(videoService.getVideosByDifficultyLevel(difficultyLevel));
+    public List<VideoResponse> getVideosByDifficultyLevel(@PathVariable String difficultyLevel) {
+        return videoService.getVideosByDifficultyLevel(difficultyLevel);
     }
 
     @GetMapping("/trending")
-    public ResponseEntity<List<Video>> getTrendingVideos() {
-        List<Video> trendingVideos = videoService.getTrendingVideos();
-        return ResponseEntity.ok(trendingVideos);
+    public List<VideoResponse> getTrendingVideos() {
+        return videoService.getTrendingVideos();
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<String> handleGeneralException(Exception e) {
-        logger.error("An unexpected error occurred: {}", e.getMessage());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("An unexpected error occurred: " + e.getMessage());
+    private static Pageable withSafeSort(Pageable pageable) {
+        for (Sort.Order order : pageable.getSort()) {
+            if (!SORTABLE_PROPERTIES.contains(order.getProperty())) {
+                throw new InvalidRequestException("Unsupported sort property: " + order.getProperty());
+            }
+        }
+        Sort sort = pageable.getSort().isSorted() ? pageable.getSort() : Sort.by(Sort.Direction.DESC, "id");
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 }
