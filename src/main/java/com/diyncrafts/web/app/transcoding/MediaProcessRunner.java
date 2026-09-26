@@ -69,11 +69,12 @@ public class MediaProcessRunner {
                 throw new TranscodingException("The video could not be processed.",
                         new IOException(command.get(0) + " exited with code " + exitCode));
             }
-        } catch (InterruptedException e) {
-            process.destroyForcibly();
-            throw e;
         } finally {
             killer.cancel(false);
+            // Covers interruption and failures in the output callback: never leave ffmpeg running.
+            if (process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
     }
 

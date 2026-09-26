@@ -1,0 +1,68 @@
+# Local development dependencies. Start with:  docker compose up -d
+# The credentials below exist only inside these throwaway containers (matching application-local.yml).
+name: diyncrafts
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: diyncraftshub
+      MYSQL_USER: diyncrafts
+      MYSQL_PASSWORD: diyncrafts-local
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-udiyncrafts", "-pdiyncrafts-local"]
+      interval: 5s
+      retries: 20
+
+  elasticsearch:
+    image: elasticsearch:9.4.5
+    environment:
+      discovery.type: single-node
+      # Local only: plain HTTP without authentication. Production clusters must use TLS + credentials.
+      xpack.security.enabled: "false"
+      # Local only: don't refuse shard allocation on nearly full developer disks.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: diyncrafts
+      RABBITMQ_DEFAULT_PASS: diyncrafts-local
+    ports:
+      - "5672:5672"     # AMQP
+      - "61613:61613"   # STOMP (WebSocket progress relay)
+      - "15672:15672"   # management UI: http://localhost:15672
+    volumes:
+      - ./docker/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/90-diyncrafts.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 20
+
+  # S3-compatible object storage for development (no authentication; objects are publicly readable,
+  # which lets the browser play the DASH output directly).
+  s3:
+    image: adobe/s3mock:5.2.3
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: diyncrafts-local
+    ports:
+      - "9090:9090"
+
+volumes:
+  mysql-data:
+  es-data:

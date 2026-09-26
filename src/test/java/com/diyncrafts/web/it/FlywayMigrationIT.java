@@ -42,14 +42,15 @@ class FlywayMigrationIT {
         jdbc.update("INSERT INTO video (id, title, thumbnail_url, upload_date, video_url, views, user_id) VALUES (1, 'Birdhouse', 't', '2024-01-01', 'v', 7, ?)", userId);
         jdbc.update("INSERT INTO guide (title, content, user_id, video_id) VALUES ('First', 'c', ?, 1)", userId);
         jdbc.update("INSERT INTO task (task_id, progress, status) VALUES ('old-task', 100, 2)");
+        jdbc.update("INSERT INTO category (name, description) VALUES ('Woodworking', 'custom description')");
         // Demonstrates the defect being fixed.
         assertThatThrownBy(() -> jdbc.update("INSERT INTO guide (title, content, user_id, video_id) VALUES ('Second', 'c', ?, 1)", userId))
                 .hasMessageContaining("Duplicate entry");
 
         flyway(schema).migrate();
-        assertThat(flyway(schema).info().current().getVersion().getVersion()).isEqualTo("5");
+        assertThat(flyway(schema).info().current().getVersion().getVersion()).isEqualTo("6");
         assertThat(flyway(schema).info().applied()).extracting(m -> m.getVersion().getVersion())
-                .containsExactly("1", "2", "3", "4", "5");
+                .containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(flyway(schema).info().applied()[0].getType().name()).isEqualTo("BASELINE");
 
         jdbc.update("INSERT INTO guide (title, content, user_id, video_id) VALUES ('Second', 'c', ?, 1)", userId);
@@ -60,6 +61,11 @@ class FlywayMigrationIT {
         // New columns/tables exist and URLs are nullable.
         jdbc.update("INSERT INTO video (title, upload_date, views, user_id) VALUES ('Pending', '2024-01-02', 0, ?)", userId);
         jdbc.update("INSERT INTO video_daily_views (video_id, view_date, views) VALUES (1, '2024-01-03', 1)");
+        // Seed data does not duplicate or overwrite existing categories.
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM category WHERE name = 'Woodworking'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT description FROM category WHERE name = 'Woodworking'", String.class))
+                .isEqualTo("custom description");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM category", Integer.class)).isEqualTo(7);
     }
 
     @Test
@@ -73,7 +79,7 @@ class FlywayMigrationIT {
             executeScript(schema, sql);
         }
         flyway(schema).migrate();
-        assertThat(flyway(schema).info().current().getVersion().getVersion()).isEqualTo("5");
+        assertThat(flyway(schema).info().current().getVersion().getVersion()).isEqualTo("6");
     }
 
     @Test
@@ -85,6 +91,7 @@ class FlywayMigrationIT {
         assertThat(jdbc(schema).queryForObject(
                 "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = ? AND table_name = 'guide' "
                         + "AND column_name = 'user_id' AND non_unique = 0", Integer.class, schema)).isZero();
+        assertThat(jdbc(schema).queryForObject("SELECT COUNT(*) FROM category", Integer.class)).isEqualTo(7);
     }
 
     private static Flyway flyway(String schema) {

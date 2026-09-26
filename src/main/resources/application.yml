@@ -89,10 +89,14 @@ management:
   endpoints:
     web:
       exposure:
+        # Only health and info are exposed over HTTP (both public); everything else stays off.
         include: health,info
   endpoint:
     health:
       show-details: never
+      # /actuator/health/liveness and /actuator/health/readiness for orchestrators.
+      probes:
+        enabled: true
 
 logging:
   level:
