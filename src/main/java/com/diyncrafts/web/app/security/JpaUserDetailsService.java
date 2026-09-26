@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.diyncrafts.web.app.repository.jpa.UserRepository;
 
 /**
- * Loads credentials for username/password login from the {@code user_account} table.
+ * Loads credentials for username-or-email/password login from the {@code user_account} table.
  */
 @Service
 public class JpaUserDetailsService implements UserDetailsService {
@@ -24,6 +24,7 @@ public class JpaUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) {
         return userRepository.findByUsername(username)
+                .or(() -> userRepository.findByEmail(username))
                 .map(user -> org.springframework.security.core.userdetails.User
                         .withUsername(user.getUsername())
                         .password(user.getPassword())

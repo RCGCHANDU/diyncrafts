@@ -205,4 +205,16 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         return encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
                 .getTokenValue();
     }
+
+    @Test
+    void loginAcceptsEmailAndKeepsCanonicalUsername() throws Exception {
+        createUser("alice", ERole.ROLE_USER);
+
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"alice@example.com\",\"password\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("alice"))
+                .andExpect(jsonPath("$.email").value("alice@example.com"));
+    }
 }
