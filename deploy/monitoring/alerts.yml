@@ -1,0 +1,116 @@
+# Alert rules for DIYnCrafts. Thresholds are starting points: tune them from real traffic.
+# Validate with: promtool check rules alerts.yml   and   promtool test rules alerts.test.yml
+groups:
+  - name: diyncrafts-availability
+    rules:
+      - alert: DiyncraftsApiDown
+        expr: absent(up{job="diyncrafts", role="api"} == 1)
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: No API instance is up
+          description: No api-blue/api-green target has answered a scrape for 2 minutes. Check `diyncrafts-deploy status` and the container logs.
+
+      - alert: DiyncraftsWorkerDown
+        expr: absent(up{job="diyncrafts", role="worker"} == 1)
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: No transcoding worker is up
+          description: Uploads are accepted but will not be processed. See RUNBOOK.md "Restart workers".
+
+      - alert: DiyncraftsHighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="diyncrafts", role="api", status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{job="diyncrafts", role="api"}[5m])) > 0.05
+          and sum(rate(http_server_requests_seconds_count{job="diyncrafts", role="api"}[5m])) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: More than 5% of API requests fail with 5xx
+          description: "Current 5xx ratio: {{ $value | humanizePercentage }}."
+
+      - alert: DiyncraftsSlowApi
+        # SLO: 95% of API requests (uploads excluded) complete within 1 s.
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{job="diyncrafts", role="api", le="1.0", uri!~"/api/videos/upload|/api/videos/create/"}[10m]))
+              / sum(rate(http_server_requests_seconds_count{job="diyncrafts", role="api", uri!~"/api/videos/upload|/api/videos/create/"}[10m]))
+          ) > 0.05
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: More than 5% of API requests take longer than 1 s
+
+  - name: diyncrafts-capacity
+    rules:
+      - alert: DiyncraftsScratchDiskLow
+        expr: disk_free_bytes{job="diyncrafts", role="api"} / disk_total_bytes{job="diyncrafts", role="api"} < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: Upload scratch disk below 15% free
+          description: Uploads are refused with 503 once free space drops under app.transcoding.min-free-space. See RUNBOOK.md "Disk full".
+
+      - alert: DiyncraftsScratchDiskCritical
+        expr: disk_free_bytes{job="diyncrafts", role="api"} / disk_total_bytes{job="diyncrafts", role="api"} < 0.05
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: Upload scratch disk below 5% free
+
+      - alert: DiyncraftsHeapPressure
+        expr: |
+          sum by (instance) (jvm_memory_used_bytes{job="diyncrafts", area="heap"})
+            / sum by (instance) (jvm_memory_max_bytes{job="diyncrafts", area="heap"} > 0) > 0.9
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.instance }} heap above 90% for 15 minutes"
+
+  - name: diyncrafts-transcoding
+    rules:
+      - alert: DiyncraftsTranscodingBacklog
+        # Jobs are waiting but none has started for 30 minutes: workers are down, stuck or saturated.
+        expr: |
+          max(diyncrafts_transcoding_tasks{job="diyncrafts", status="queued"}) > 0
+          and sum(increase(diyncrafts_transcoding_queue_wait_seconds_count{job="diyncrafts"}[30m])) == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Transcoding jobs are queued but none has started in 30 minutes
+
+      - alert: DiyncraftsTranscodingQueueWaitSlo
+        # SLO: 90% of jobs start within 15 minutes of upload.
+        expr: |
+          1 - (
+            sum(increase(diyncrafts_transcoding_queue_wait_seconds_bucket{job="diyncrafts", le="900.0"}[1h]))
+              / sum(increase(diyncrafts_transcoding_queue_wait_seconds_count{job="diyncrafts"}[1h]))
+          ) > 0.1
+          and sum(increase(diyncrafts_transcoding_queue_wait_seconds_count{job="diyncrafts"}[1h])) >= 5
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: More than 10% of transcoding jobs waited over 15 minutes to start
+          description: Add worker capacity (see ARCHITECTURE.md "Scale when needed").
+
+      - alert: DiyncraftsTranscodingFailures
+        # SLO: at least 95% of jobs complete.
+        expr: |
+          sum(increase(diyncrafts_transcoding_jobs_total{job="diyncrafts", outcome="failed"}[1h]))
+            / sum(increase(diyncrafts_transcoding_jobs_total{job="diyncrafts"}[1h])) > 0.05
+          and sum(increase(diyncrafts_transcoding_jobs_total{job="diyncrafts"}[1h])) >= 5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: More than 5% of transcoding jobs failed in the last hour
+          description: Check the tasks' errorDetails and the worker logs (taskId in the MDC). See RUNBOOK.md "Failed or stuck jobs".
+
+      - alert: DiyncraftsDeadLetters
+        # Needs the rabbitmq scrape job (on-host broker) or the equivalent metric of a managed broker.
+        expr: max(rabbitmq_detailed_queue_messages{queue="diyncrafts.transcoding.dlq"}) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: Transcoding messages are in the dead-letter queue
+          description: See RUNBOOK.md "Dead-lettered jobs". Do not purge the queue without an explicit decision.

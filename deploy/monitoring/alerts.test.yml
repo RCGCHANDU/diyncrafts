@@ -1,0 +1,94 @@
+# promtool test rules alerts.test.yml
+rule_files: [alerts.yml]
+evaluation_interval: 1m
+
+tests:
+  - name: API down when no api colour answers
+    interval: 1m
+    input_series:
+      - series: 'up{job="diyncrafts", role="api", instance="api-blue"}'
+        values: '1 1 0 0 0 0 0'
+      - series: 'up{job="diyncrafts", role="worker", instance="worker-blue"}'
+        values: '1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DiyncraftsApiDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DiyncraftsApiDown
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: No API instance is up
+              description: No api-blue/api-green target has answered a scrape for 2 minutes. Check `diyncrafts-deploy status` and the container logs.
+
+  - name: Blue/green overlap is not an outage
+    interval: 1m
+    input_series:
+      - series: 'up{job="diyncrafts", role="api", instance="api-blue"}'
+        values: '1 1 1 0 0 0 0 0'
+      - series: 'up{job="diyncrafts", role="api", instance="api-green"}'
+        values: '_ _ 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: DiyncraftsApiDown
+        exp_alerts: []
+
+  - name: Scratch disk below 15 percent
+    interval: 1m
+    input_series:
+      - series: 'disk_free_bytes{job="diyncrafts", role="api", instance="api-blue", path="/var/lib/diyncrafts/work"}'
+        values: '10x15'
+      - series: 'disk_total_bytes{job="diyncrafts", role="api", instance="api-blue", path="/var/lib/diyncrafts/work"}'
+        values: '100x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: DiyncraftsScratchDiskLow
+        exp_alerts:
+          - exp_labels: { severity: warning, job: diyncrafts, role: api, instance: api-blue, path: /var/lib/diyncrafts/work }
+            exp_annotations:
+              summary: Upload scratch disk below 15% free
+              description: Uploads are refused with 503 once free space drops under app.transcoding.min-free-space. See RUNBOOK.md "Disk full".
+
+  - name: Queued jobs that never start
+    interval: 1m
+    input_series:
+      - series: 'diyncrafts_transcoding_tasks{job="diyncrafts", role="api", instance="api-blue", status="queued"}'
+        values: '3x60'
+      - series: 'diyncrafts_transcoding_queue_wait_seconds_count{job="diyncrafts", role="worker", instance="worker-blue"}'
+        values: '5x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DiyncraftsTranscodingBacklog
+        exp_alerts:
+          - exp_labels: { severity: critical }
+            exp_annotations:
+              summary: Transcoding jobs are queued but none has started in 30 minutes
+
+  - name: Jobs keep starting, no backlog alert
+    interval: 1m
+    input_series:
+      - series: 'diyncrafts_transcoding_tasks{job="diyncrafts", role="api", instance="api-blue", status="queued"}'
+        values: '3x60'
+      - series: 'diyncrafts_transcoding_queue_wait_seconds_count{job="diyncrafts", role="worker", instance="worker-blue"}'
+        values: '0+1x60'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DiyncraftsTranscodingBacklog
+        exp_alerts: []
+
+  - name: Failure SLO
+    interval: 1m
+    input_series:
+      - series: 'diyncrafts_transcoding_jobs_total{job="diyncrafts", role="worker", instance="worker-blue", outcome="completed"}'
+        values: '0+1x90'
+      - series: 'diyncrafts_transcoding_jobs_total{job="diyncrafts", role="worker", instance="worker-blue", outcome="failed"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: DiyncraftsTranscodingFailures
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: More than 5% of transcoding jobs failed in the last hour
+              description: Check the tasks' errorDetails and the worker logs (taskId in the MDC). See RUNBOOK.md "Failed or stuck jobs".

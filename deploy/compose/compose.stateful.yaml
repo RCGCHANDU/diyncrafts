@@ -1,0 +1,98 @@
+# OPTIONAL: stateful services on the application host, for staging or a very small production.
+# Managed services (automated backups, patching, failover) are preferred for production; see
+# docs/deployment/ARCHITECTURE.md. This is a separate Compose project, so application deploys never
+# restart or recreate these containers.
+#
+#   docker compose -f compose.stateful.yaml --env-file ${DIYNCRAFTS_ETC}/stack.env up -d
+#
+# Nothing is published to the internet. The RabbitMQ management UI is bound to the host's loopback
+# interface only (reach it through an SSH tunnel). Secrets are files under ${SECRETS_DIR}:
+#   mysql/root-password, mysql/app-password (same value as backend/spring.datasource.password)
+#   rabbitmq/credentials.conf  (default_user = diyncrafts / default_pass = <spring.rabbitmq.password>)
+#   elasticsearch/elastic-password
+# deploy/host/bootstrap.sh generates any of these that are missing.
+# Image tags are pinned by digest; Dependabot proposes updates.
+name: diyncrafts-data
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: local
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  mysql:
+    <<: *hardening
+    image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    environment:
+      MYSQL_DATABASE: diyncraftshub
+      MYSQL_USER: diyncrafts
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql/app-password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql/root-password
+    command: ["--innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}", "--binlog-expire-logs-seconds=604800"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ${SECRETS_DIR:-/etc/diyncrafts/secrets}/mysql:/run/secrets/mysql:ro
+      # Backups written by deploy/bin/backup-mysql.sh (mysqldump runs inside this container).
+      - ${BACKUP_DIR:-/var/backups/diyncrafts}:/backups
+    mem_limit: ${MYSQL_MEMORY:-1g}
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$(cat /run/secrets/mysql/root-password)\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  rabbitmq:
+    <<: *hardening
+    image: rabbitmq:4.3-management@sha256:ddc75301edf58a8332934cf2d801be7cbf8d65c6458d747364a8046238ff1c89
+    hostname: rabbitmq
+    ports:
+      # Management UI on the host's loopback only: ssh -L 15672:127.0.0.1:15672 <host>
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ../stateful/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ../stateful/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/90-diyncrafts.conf:ro
+      - ${SECRETS_DIR:-/etc/diyncrafts/secrets}/rabbitmq/credentials.conf:/etc/rabbitmq/conf.d/95-credentials.conf:ro
+    mem_limit: ${RABBITMQ_MEMORY:-512m}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  elasticsearch:
+    <<: *hardening
+    image: elasticsearch:9.4.5@sha256:b0af55a1f3a9d3b80d5036ffa09007fab97da124d2ab6438410c33a1d19b3d8f
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      # Plain HTTP only on the private Docker network of this host. A remote or managed cluster
+      # must be used over https with certificate verification.
+      xpack.security.http.ssl.enabled: "false"
+      ELASTIC_PASSWORD_FILE: /run/secrets/elasticsearch/elastic-password
+      ES_JAVA_OPTS: -Xms${ELASTICSEARCH_HEAP:-1g} -Xmx${ELASTICSEARCH_HEAP:-1g}
+      # Keep enabled in real environments (it protects the node when its disk fills up).
+      cluster.routing.allocation.disk.threshold_enabled: ${ELASTICSEARCH_DISK_THRESHOLD_ENABLED:-true}
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - ${SECRETS_DIR:-/etc/diyncrafts/secrets}/elasticsearch:/run/secrets/elasticsearch:ro
+    mem_limit: ${ELASTICSEARCH_MEMORY:-2g}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs -u \"elastic:$$(cat /run/secrets/elasticsearch/elastic-password)\" http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow\\&timeout=5s >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+
+volumes:
+  mysql-data:
+  rabbitmq-data:
+  es-data:
+
+networks:
+  default:
+    name: diyncrafts
+    external: true

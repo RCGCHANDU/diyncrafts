@@ -1,0 +1,127 @@
+# DIYnCrafts edge proxy: HTTPS, routing, request limits and blue/green load balancing.
+#
+#   /          -> frontend  (static files)
+#   /api/*     -> api-blue / api-green
+#   /ws/*      -> api-blue / api-green (SockJS + raw WebSocket, /ws/websocket)
+#   /actuator  -> never routed (404); probes and metrics stay on the internal network
+#
+# Values come from the environment of the edge container (see deploy/compose/stack.env.example).
+# Caddy obtains and renews certificates automatically once SITE_ADDRESS is a public DNS name that
+# points at this host and ports 80 and 443 are reachable.
+{
+	# Certificates and ACME account keys live in /data (a persistent volume).
+
+	# Failed probes of the idle colour are expected; keep only warnings from the health checker.
+	log default {
+		exclude http.handlers.reverse_proxy.health_checker.active
+	}
+	log health {
+		include http.handlers.reverse_proxy.health_checker.active
+		level WARN
+	}
+	servers {
+		timeouts {
+			# A whole upload must arrive within this time (2 GB at ~1 MB/s takes ~35 min).
+			read_body {$UPLOAD_READ_TIMEOUT:1h}
+			read_header 10s
+			idle 5m
+		}
+		# Uncomment only when another proxy or CDN sits in front of this one; list its ranges so
+		# X-Forwarded-For from it is trusted and from anyone else is not.
+		# trusted_proxies static <CIDR ...>
+	}
+}
+
+(backend) {
+	reverse_proxy api-blue:8080 api-green:8080 {
+		lb_policy round_robin
+		# During a deploy one colour may be missing or stopping. Retry on the other colour instead of
+		# failing. Retries only happen when the connection could not be made, so no request runs twice.
+		lb_try_duration 15s
+		lb_try_interval 250ms
+		fail_duration 10s
+		# Active readiness check: a colour receives traffic only while Spring reports it ready.
+		health_uri /actuator/health/readiness
+		health_interval 2s
+		health_timeout 2s
+		transport http {
+			dial_timeout 3s
+			# Time from the end of the request body to the response headers (uploads return as soon
+			# as the file is stored and the job queued).
+			response_header_timeout {$BACKEND_RESPONSE_TIMEOUT:2m}
+		}
+		# Caddy sets X-Forwarded-For/-Proto/-Host; Spring trusts them from private addresses only.
+	}
+}
+
+{$SITE_ADDRESS} {
+	header {
+		# HSTS without includeSubDomains/preload: those affect other hosts under the domain and
+		# must be an explicit operator decision.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	log {
+		# Access logs as JSON on stdout. Query strings are removed, and Authorization headers and
+		# cookies are never logged.
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" ""
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+				request>headers>Sec-Websocket-Key delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+
+	# Probes and metrics are internal only.
+	handle /actuator* {
+		respond 404
+	}
+
+	handle /ws/* {
+		import backend
+	}
+
+	handle /api/* {
+		# Large bodies only where the API accepts video or image uploads; keep in step with
+		# spring.servlet.multipart.max-request-size (2GB = 2 GiB in Spring).
+		# (Exactly one limit applies to each request; limits would otherwise stack.)
+		@upload {
+			method POST PUT
+			path /api/videos/upload /api/videos/create/ /api/videos/* /api/guides/*
+		}
+		@other {
+			not {
+				method POST PUT
+				path /api/videos/upload /api/videos/create/ /api/videos/* /api/guides/*
+			}
+		}
+		request_body @upload {
+			max_size {$MAX_UPLOAD_SIZE:2GiB}
+		}
+		request_body @other {
+			max_size {$MAX_REQUEST_SIZE:1MiB}
+		}
+		encode zstd gzip
+		import backend
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy frontend:8080 {
+			# Rides out a frontend restart (it is back within a second or two).
+			lb_try_duration 10s
+			lb_try_interval 250ms
+		}
+	}
+}
+
+# Additional sites (for example a media host in front of object storage) can be added as files
+# in this directory without editing this one.
+import /etc/caddy/sites.d/*.caddy

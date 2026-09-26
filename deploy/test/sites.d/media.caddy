@@ -1,0 +1,7 @@
+# Test only: serves the S3 mock as the media origin, as a CDN would in front of a real bucket.
+# CORS is scoped to the site origin (the mock itself answers with "*", which is replaced here).
+media.localhost {
+	reverse_proxy s3mock:9090 {
+		header_down Access-Control-Allow-Origin "https://localhost:18443"
+	}
+}
