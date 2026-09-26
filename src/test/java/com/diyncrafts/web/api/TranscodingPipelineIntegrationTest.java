@@ -33,6 +33,8 @@ import com.diyncrafts.web.app.transcoding.TranscodingWorker;
 import com.diyncrafts.web.app.transcoding.WorkDirectories;
 import com.diyncrafts.web.support.IntegrationTestSupport;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -53,6 +55,8 @@ class TranscodingPipelineIntegrationTest extends IntegrationTestSupport {
     WorkDirectories workDirectories;
     @Autowired
     MessageConverter messageConverter;
+    @Autowired
+    MeterRegistry meterRegistry;
 
     User owner;
     Video video;
@@ -70,7 +74,14 @@ class TranscodingPipelineIntegrationTest extends IntegrationTestSupport {
     @Test
     void successfulJobCompletesTaskPublishesUrlsAndCleansUp() throws Exception {
         String taskId = queuedTask(MediaFixtures::withAudio);
+        double completedBefore = jobs("completed");
+        long waitsBefore = meterRegistry.get("diyncrafts.transcoding.queue.wait").timer().count();
         worker.onJob(new TranscodingJob(taskId, video.getId()));
+
+        assertThat(jobs("completed")).isEqualTo(completedBefore + 1);
+        assertThat(meterRegistry.get("diyncrafts.transcoding.queue.wait").timer().count()).isEqualTo(waitsBefore + 1);
+        assertThat(meterRegistry.get("diyncrafts.transcoding.processing").tag("outcome", "completed").timer().count())
+                .isPositive();
 
         Task task = taskRepository.findById(taskId).orElseThrow();
         assertThat(task.getStatus()).isEqualTo(TaskStatus.COMPLETED);
@@ -108,7 +119,9 @@ class TranscodingPipelineIntegrationTest extends IntegrationTestSupport {
     @Test
     void corruptVideoFailsTaskWithSafeMessageAndCleansUp() throws Exception {
         String taskId = queuedTask(input -> Files.write(input, "garbage".getBytes()));
+        double failedBefore = jobs("failed");
         worker.onJob(new TranscodingJob(taskId, video.getId()));
+        assertThat(jobs("failed")).isEqualTo(failedBefore + 1);
 
         Task task = taskRepository.findById(taskId).orElseThrow();
         assertThat(task.getStatus()).isEqualTo(TaskStatus.FAILED);
@@ -187,5 +200,10 @@ class TranscodingPipelineIntegrationTest extends IntegrationTestSupport {
     @FunctionalInterface
     interface InputWriter {
         void write(Path input) throws Exception;
+    }
+
+    private double jobs(String outcome) {
+        var counter = meterRegistry.find("diyncrafts.transcoding.jobs").tag("outcome", outcome).counter();
+        return counter == null ? 0 : counter.count();
     }
 }

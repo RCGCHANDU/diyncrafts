@@ -11,12 +11,14 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -62,11 +64,13 @@ public class VideoUploadService {
     private final AccessGuard accessGuard;
     private final TransactionTemplate transactions;
     private final Clock clock;
+    private final DataSize minFreeSpace;
 
     public VideoUploadService(TaskRepository taskRepository, VideoRepository videoRepository,
             VideoService videoService, UserService userService, SearchIndexService searchIndex,
             ObjectStorageService storage, TranscodingJobPublisher publisher, WorkDirectories workDirectories,
-            AccessGuard accessGuard, PlatformTransactionManager transactionManager, Clock clock) {
+            AccessGuard accessGuard, PlatformTransactionManager transactionManager, Clock clock,
+            @Value("${app.transcoding.min-free-space:2GB}") DataSize minFreeSpace) {
         this.taskRepository = taskRepository;
         this.videoRepository = videoRepository;
         this.videoService = videoService;
@@ -78,6 +82,7 @@ public class VideoUploadService {
         this.accessGuard = accessGuard;
         this.transactions = new TransactionTemplate(transactionManager);
         this.clock = clock;
+        this.minFreeSpace = minFreeSpace;
     }
 
     public VideoAndTaskResponse upload(VideoUploadRequest request, Authentication authentication) throws IOException {
@@ -85,6 +90,7 @@ public class VideoUploadService {
         if (videoFile == null || videoFile.isEmpty()) {
             throw new InvalidRequestException("videoFile is required and must not be empty.");
         }
+        requireScratchSpace(videoFile.getSize());
         User owner = userService.currentUser(authentication);
         // Resolve the category before any file is stored so invalid requests leave nothing behind.
         transactions.executeWithoutResult(status -> videoService.resolveCategory(request.category()));
@@ -161,6 +167,28 @@ public class VideoUploadService {
             workDirectories.deleteQuietly(taskId);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Video processing is temporarily unavailable.", e);
+        }
+    }
+
+    /**
+     * Refuses an upload that would leave less than {@code app.transcoding.min-free-space} on the scratch
+     * filesystem once its transcoded output (estimated at the input's size) is written. The upload
+     * itself is already on that filesystem, so moving it into the task directory needs no more space.
+     */
+    private void requireScratchSpace(long uploadBytes) {
+        long usable;
+        try {
+            usable = workDirectories.usableSpace();
+        } catch (IOException e) {
+            log.error("Cannot determine free space of the transcoding work directory", e);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Video processing is temporarily unavailable.", e);
+        }
+        if (usable - uploadBytes < minFreeSpace.toBytes()) {
+            log.warn("Rejecting upload of {} bytes: only {} bytes free in the work directory (minimum {})",
+                    uploadBytes, usable, minFreeSpace.toBytes());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Video processing storage is temporarily full. Please try again later.");
         }
     }
 

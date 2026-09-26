@@ -19,6 +19,12 @@
 		<java.version>17</java.version>
 		<!-- Not managed by Spring Boot; imported as a BOM below so all AWS modules stay aligned. -->
 		<aws-sdk.version>2.55.6</aws-sdk.version>
+		<!-- Security overrides of Spring Boot 4.1.1's managed versions (found by the image scan in CI).
+		     Remove each one once a Spring Boot release manages this version or newer. -->
+		<!-- CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 (fixed in 11.0.25) -->
+		<tomcat.version>11.0.26</tomcat.version>
+		<!-- CVE-2026-63337, CVE-2026-69219, CVE-2026-69220, CVE-2026-75516 (fixed in 5.34.0) -->
+		<rabbit-amqp-client.version>5.36.0</rabbit-amqp-client.version>
 	</properties>
 
 	<dependencyManagement>
@@ -74,6 +80,12 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<!-- /actuator/prometheus (exposed only by the "prod" profile, never routed by the edge). -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>software.amazon.awssdk</groupId>
@@ -181,6 +193,14 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<!-- META-INF/build-info.properties: version and build time in /actuator/info. -->
+					<execution>
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+					</execution>
+				</executions>
 				<configuration>
 					<excludes>
 						<exclude>

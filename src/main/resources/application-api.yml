@@ -1,0 +1,13 @@
+# Runtime role "api": serves REST and WebSocket traffic, receives uploads and runs Flyway migrations.
+# It does not consume transcoding jobs, so ffmpeg never competes with HTTP traffic for CPU.
+# Activate with SPRING_PROFILES_ACTIVE=prod,api. Requires app.websocket.relay.enabled=true whenever
+# a separate worker runs, so the worker's progress messages reach browsers connected to this process.
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+  # Graceful shutdown lets in-flight requests (including uploads) finish before the process exits.
+  # Keep the platform's grace period (docker stop_grace_period) above this value.
+  lifecycle:
+    timeout-per-shutdown-phase: 2m

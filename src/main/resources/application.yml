@@ -47,8 +47,11 @@ spring:
           max-interval: 1m
   servlet:
     multipart:
+      # Keep in step with the edge proxy's upload limit (deploy/caddy/Caddyfile, MAX_UPLOAD_SIZE).
       max-file-size: 2GB
       max-request-size: 2GB
+      # Buffer uploads on the scratch filesystem so moving them into the task directory is a rename.
+      location: ${app.transcoding.work-dir}/.multipart
 
 app:
   jwt:
@@ -79,6 +82,11 @@ app:
     # Must stay below RabbitMQ's consumer_timeout (30 min by default; docker-compose raises it),
     # otherwise the broker redelivers the job while it is still running.
     timeout: 25m
+    # How long a stopping process waits for the running job before handing it back to the broker.
+    # Must stay below spring.lifecycle.timeout-per-shutdown-phase (30s); the "worker" profile raises both.
+    shutdown-timeout: 25s
+    # Uploads are refused (503) when accepting one would leave less than this on the scratch disk.
+    min-free-space: 2GB
     renditions:
       - { short-side: 1080, bitrate: 5M, max-rate: 6M, buffer-size: 10M }
       - { short-side: 720, bitrate: 3M, max-rate: 3500k, buffer-size: 6M }
@@ -86,6 +94,22 @@ app:
       - { short-side: 360, bitrate: 800k, max-rate: 1M, buffer-size: 2M }
 
 management:
+  info:
+    # Publishes only info.* properties, e.g. info.app.revision from the image (INFO_APP_REVISION).
+    env:
+      enabled: true
+  metrics:
+    tags:
+      application: diyncrafts
+    system:
+      diskspace:
+        paths: ${app.transcoding.work-dir}
+    distribution:
+      # Histogram buckets at the SLO thresholds used by deploy/monitoring/alerts.yml.
+      slo:
+        http.server.requests: 250ms,1s,5s
+        diyncrafts.transcoding.queue.wait: 1m,5m,15m
+        diyncrafts.transcoding.processing: 5m,15m,25m
   endpoints:
     web:
       exposure:
