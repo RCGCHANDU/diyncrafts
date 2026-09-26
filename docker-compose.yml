@@ -1,3 +1,5 @@
+# LOCAL DEVELOPMENT ONLY - NOT FOR PRODUCTION. Throwaway credentials, no TLS, open ports.
+# Staging/production use deploy/compose/ (see docs/deployment/).
 # Local development dependencies. Start with:  docker compose up -d
 # The credentials below exist only inside these throwaway containers (matching application-local.yml).
 name: diyncrafts

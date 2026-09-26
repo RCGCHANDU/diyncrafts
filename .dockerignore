@@ -1,0 +1,23 @@
+# Only the Maven wrapper, pom.xml and src/ are needed to build the image.
+.git
+.gitattributes
+.github
+.idea
+.vscode
+*.iml
+.settings
+.project
+.classpath
+target
+build
+*.log
+HELP.md
+README.md
+docs
+deploy
+docker
+docker-compose.yml
+# Never send local secrets to the build context.
+.env
+.env.*
+*.env
