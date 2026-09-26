@@ -1,0 +1,212 @@
+# Deploys published images to a host running deploy/compose/compose.yaml.
+#
+#   staging     automatically after a successful CI run on main (the backend digest it published),
+#               or on request (the frontend repository's CI requests frontend deploys).
+#   production  manually: "promote" deploys exactly the digests running in staging. The production
+#               environment's required reviewers approve the job before it starts.
+#
+# The runner reaches the host over SSH with a key that can only run diyncrafts-deploy (forced
+# command), so this workflow can deploy, roll back and read status, and nothing else.
+# Environment secrets/variables: see docs/deployment/ENVIRONMENTS.md.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+      action:
+        description: "promote: production gets the digests running in staging. deploy: the given image. rollback: the previous digest."
+        type: choice
+        options: [promote, deploy, rollback]
+        default: promote
+      component:
+        type: choice
+        options: [both, backend, frontend]
+        default: both
+      image:
+        description: "deploy only: <repository>@sha256:<digest>"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# One deploy per environment at a time; never cancel one that is running.
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only successful pushes to main (not pull requests) deploy automatically.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    permissions:
+      contents: read
+      actions: read # the CI run's artifact with the published digest
+    outputs:
+      environment: ${{ steps.plan.outputs.environment }}
+      action: ${{ steps.plan.outputs.action }}
+      component: ${{ steps.plan.outputs.component }}
+      image: ${{ steps.plan.outputs.image }}
+    steps:
+      - name: Published digest of the CI run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: backend-image
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/ci
+
+      - name: Plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_ENVIRONMENT: ${{ inputs.environment }}
+          IN_ACTION: ${{ inputs.action }}
+          IN_COMPONENT: ${{ inputs.component }}
+          IN_IMAGE: ${{ inputs.image }}
+        run: |
+          if [[ $EVENT == workflow_run ]]; then
+            environment=staging action=deploy component=backend
+            image=$(cat "$RUNNER_TEMP/ci/image-ref.txt")
+          else
+            environment=$IN_ENVIRONMENT action=$IN_ACTION component=$IN_COMPONENT image=$IN_IMAGE
+          fi
+          case $action in
+            deploy)
+              [[ $component == backend || $component == frontend ]] || { echo "::error::deploy needs component backend or frontend"; exit 1; }
+              [[ $image =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]] || { echo "::error::image must be ghcr.io/<name>@sha256:<digest>"; exit 1; }
+              ;;
+            promote)
+              [[ $environment == production ]] || { echo "::error::promote targets production (it copies staging)"; exit 1; }
+              ;;
+            rollback) ;;
+            *) echo "::error::unknown action"; exit 1 ;;
+          esac
+          {
+            echo "environment=$environment"
+            echo "action=$action"
+            echo "component=$component"
+            echo "image=$image"
+          } >> "$GITHUB_OUTPUT"
+          echo "Plan: $action $component on $environment ${image:-}" >> "$GITHUB_STEP_SUMMARY"
+
+  # Production promotion reads what staging runs, so production gets exactly those digests.
+  staging-digests:
+    needs: plan
+    if: needs.plan.outputs.action == 'promote'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    outputs:
+      backend: ${{ steps.status.outputs.backend }}
+      frontend: ${{ steps.status.outputs.frontend }}
+    steps:
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          (umask 077; printf '%s\n' "$KEY" > ~/.ssh/deploy_key; printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts)
+      - name: Read staging status
+        id: status
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER_NAME: ${{ vars.DEPLOY_USER }}
+        run: |
+          status=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$USER_NAME@$HOST" status)
+          echo "$status"
+          backend=$(sed -n 's/^backend: *//p' <<<"$status")
+          frontend=$(sed -n 's/^frontend: *//p' <<<"$status")
+          [[ $backend == *@sha256:* && $frontend == *@sha256:* ]] || { echo "::error::staging has no complete deployment to promote"; exit 1; }
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: [plan, staging-digests]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      (needs.staging-digests.result == 'success' || needs.staging-digests.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60 # a worker switch may wait for a running transcoding job
+    environment:
+      name: ${{ needs.plan.outputs.environment }}
+      url: ${{ vars.PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy/bin
+
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          (umask 077; printf '%s\n' "$KEY" > ~/.ssh/deploy_key; printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts)
+
+      - name: Deploy
+        id: deploy
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER_NAME: ${{ vars.DEPLOY_USER }}
+          ACTION: ${{ needs.plan.outputs.action }}
+          COMPONENT: ${{ needs.plan.outputs.component }}
+          IMAGE: ${{ needs.plan.outputs.image }}
+          STAGING_BACKEND: ${{ needs.staging-digests.outputs.backend }}
+          STAGING_FRONTEND: ${{ needs.staging-digests.outputs.frontend }}
+        run: |
+          remote() { ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 "$USER_NAME@$HOST" "$@"; }
+          components=() changed=()
+          [[ $COMPONENT == both || $COMPONENT == backend ]] && components+=(backend)
+          [[ $COMPONENT == both || $COMPONENT == frontend ]] && components+=(frontend)
+          for c in "${components[@]}"; do
+            case $ACTION in
+              deploy) ref=$IMAGE ;;
+              promote) if [[ $c == backend ]]; then ref=$STAGING_BACKEND; else ref=$STAGING_FRONTEND; fi ;;
+              rollback) ref="" ;;
+            esac
+            code=0
+            if [[ $ACTION == rollback ]]; then remote rollback "$c" || code=$?; else remote deploy "$c" "$ref" || code=$?; fi
+            # Exit code 3: aborted before switching, the previous version is still active.
+            if [[ $code != 3 ]]; then changed+=("$c"); echo "changed=${changed[*]}" >> "$GITHUB_OUTPUT"; fi
+            echo "- $ACTION $c ${ref:-(previous digest)}: exit $code" >> "$GITHUB_STEP_SUMMARY"
+            [[ $code == 0 ]] || exit 1
+          done
+          remote status | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: deploy/bin/smoke-test.sh "$PUBLIC_URL"
+
+      - name: Roll back after a failed deploy
+        if: failure() && needs.plan.outputs.action != 'rollback' && steps.deploy.outputs.changed != ''
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER_NAME: ${{ vars.DEPLOY_USER }}
+          CHANGED: ${{ steps.deploy.outputs.changed }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          for c in $CHANGED; do
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              "$USER_NAME@$HOST" rollback "$c" || echo "::error::rollback of $c failed; see RUNBOOK.md"
+          done
+          deploy/bin/smoke-test.sh "$PUBLIC_URL"
+          echo "Deploy failed and was rolled back." >> "$GITHUB_STEP_SUMMARY"
