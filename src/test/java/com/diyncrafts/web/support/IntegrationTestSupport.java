@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,8 +29,8 @@ import com.diyncrafts.web.app.security.JwtService;
 import software.amazon.awssdk.services.s3.S3Client;
 
 /**
- * Full application context on an in-memory database. S3 and RabbitMQ are mocked; Elasticsearch points
- * at a closed port (index writes are best-effort, searches return 503). No infrastructure or
+ * Full application context on an in-memory database. S3 is mocked, RabbitMQ listeners do not start
+ * (tests that publish mock {@code RabbitTemplate}), Elasticsearch points at a closed port (index writes are best-effort, searches return 503). No infrastructure or
  * credentials are needed.
  */
 @SpringBootTest
@@ -62,8 +61,6 @@ public abstract class IntegrationTestSupport {
 
     @MockitoBean
     protected S3Client s3Client;
-    @MockitoBean
-    protected RabbitTemplate rabbitTemplate;
 
     @Autowired
     protected VideoDailyViewsRepository dailyViewsRepository;

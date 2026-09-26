@@ -20,7 +20,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.diyncrafts.web.app.config.TranscodingProperties;
 import com.diyncrafts.web.app.dto.TaskResponse;
 import com.diyncrafts.web.app.dto.VideoAndTaskResponse;
 import com.diyncrafts.web.app.dto.VideoResponse;
@@ -66,7 +65,7 @@ public class VideoUploadService {
 
     public VideoUploadService(TaskRepository taskRepository, VideoRepository videoRepository,
             VideoService videoService, UserService userService, SearchIndexService searchIndex,
-            ObjectStorageService storage, TranscodingJobPublisher publisher, TranscodingProperties properties,
+            ObjectStorageService storage, TranscodingJobPublisher publisher, WorkDirectories workDirectories,
             AccessGuard accessGuard, PlatformTransactionManager transactionManager, Clock clock) {
         this.taskRepository = taskRepository;
         this.videoRepository = videoRepository;
@@ -75,7 +74,7 @@ public class VideoUploadService {
         this.searchIndex = searchIndex;
         this.storage = storage;
         this.publisher = publisher;
-        this.workDirectories = new WorkDirectories(properties.workDir());
+        this.workDirectories = workDirectories;
         this.accessGuard = accessGuard;
         this.transactions = new TransactionTemplate(transactionManager);
         this.clock = clock;

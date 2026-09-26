@@ -8,20 +8,24 @@ import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import com.diyncrafts.web.app.config.TranscodingProperties;
 
 import com.diyncrafts.web.app.storage.ObjectKeys;
 
 /**
  * Per-task scratch space: {@code {workDir}/{taskId}/input} and {@code {workDir}/{taskId}/output/}.
  */
-public final class WorkDirectories {
+@Component
+public class WorkDirectories {
 
     private static final Logger log = LoggerFactory.getLogger(WorkDirectories.class);
 
     private final Path root;
 
-    public WorkDirectories(Path root) {
-        this.root = root.toAbsolutePath().normalize();
+    public WorkDirectories(TranscodingProperties properties) {
+        this.root = properties.workDir().toAbsolutePath().normalize();
     }
 
     public Path taskDir(String taskId) {

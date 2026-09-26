@@ -19,7 +19,9 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.AmqpConnectException;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -42,6 +44,9 @@ class UploadAndSearchIntegrationTest extends IntegrationTestSupport {
 
     @Value("${app.transcoding.work-dir}")
     Path workDir;
+
+    @MockitoBean
+    RabbitTemplate rabbitTemplate;
 
     @Test
     void uploadCreatesVideoAndQueuedTaskAndPublishesJob() throws Exception {

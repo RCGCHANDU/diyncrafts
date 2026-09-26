@@ -5,12 +5,16 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 
 @Entity
 public class Task {
     @Id
     private String taskId;
+    // Stored as an ordinal (legacy column: tinyint 0..3). Never reorder TaskStatus constants.
+    @Enumerated(EnumType.ORDINAL)
     private TaskStatus status;
     private double progress;
     private LocalDateTime startTime;
