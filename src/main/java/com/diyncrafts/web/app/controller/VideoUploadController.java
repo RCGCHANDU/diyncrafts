@@ -2,24 +2,19 @@ package com.diyncrafts.web.app.controller;
 
 import java.io.IOException;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
+import com.diyncrafts.web.app.dto.TaskResponse;
 import com.diyncrafts.web.app.dto.VideoAndTaskResponse;
-import com.diyncrafts.web.app.dto.VideoMetadata;
-import com.diyncrafts.web.app.model.Task;
-import com.diyncrafts.web.app.model.Video;
+import com.diyncrafts.web.app.dto.VideoResponse;
+import com.diyncrafts.web.app.dto.VideoUploadRequest;
 import com.diyncrafts.web.app.service.VideoUploadService;
 
 import jakarta.validation.Valid;
@@ -27,35 +22,31 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/videos")
 public class VideoUploadController {
-    @Autowired
-    private VideoUploadService taskService;
 
-    @Autowired
-    private VideoUploadService videoUploadService;
+    private final VideoUploadService videoUploadService;
 
-    @PostMapping("/upload")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<VideoAndTaskResponse> upload(
-            @RequestParam("videoFile") MultipartFile file,
-            @Valid @ModelAttribute VideoMetadata videoUploadRequest) throws IOException {
+    public VideoUploadController(VideoUploadService videoUploadService) {
+        this.videoUploadService = videoUploadService;
+    }
 
-        videoUploadRequest.setVideoFile(file);
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    @PostMapping(path = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VideoAndTaskResponse upload(@Valid @ModelAttribute VideoUploadRequest request,
+            Authentication authentication) throws IOException {
+        return videoUploadService.upload(request, authentication);
+    }
 
-        Video video = videoUploadService.createVideo(videoUploadRequest, authentication);
-        String taskId = taskService.initiateTranscoding(file, video.getId());
-        Task task = taskService.getTask(taskId); // Optional: fetch full task details
-
-        VideoAndTaskResponse videoAndTaskResponse = new VideoAndTaskResponse();
-        videoAndTaskResponse.setVideo(video);
-        videoAndTaskResponse.setTask(task);
-
-        return ResponseEntity.ok(videoAndTaskResponse);
+    /**
+     * Legacy endpoint kept for existing clients. It used to store a video without transcoding it
+     * (leaving an unusable URL); it now runs the same upload pipeline as {@code /upload}.
+     */
+    @PostMapping(path = "/create/", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public VideoResponse create(@Valid @ModelAttribute VideoUploadRequest request, Authentication authentication)
+            throws IOException {
+        return videoUploadService.upload(request, authentication).video();
     }
 
     @GetMapping("/status/{taskId}")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public Task getTaskStatus(@PathVariable String taskId) {
-        return taskService.getTask(taskId);
+    public TaskResponse getTaskStatus(@PathVariable String taskId, Authentication authentication) {
+        return videoUploadService.getTask(taskId, authentication);
     }
 }

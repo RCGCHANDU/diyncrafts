@@ -1,11 +1,13 @@
 package com.diyncrafts.web.app.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.io.Serializable;
 
-@Data
+@Getter
+@Setter
 @Entity
 public class Step implements Serializable {
     @Id
@@ -20,4 +22,9 @@ public class Step implements Serializable {
     @ManyToOne
     @JoinColumn(name = "guide_id")
     private Guide guide;
+
+    @Override
+    public String toString() {
+        return "Step[id=" + id + ", stepNumber=" + stepNumber + "]";
+    }
 }

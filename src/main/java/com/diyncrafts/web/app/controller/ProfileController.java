@@ -1,18 +1,23 @@
 package com.diyncrafts.web.app.controller;
 
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.diyncrafts.web.app.dto.UserProfileResponse;
 import com.diyncrafts.web.app.service.UserService;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/api/user")
 public class ProfileController {
+
     private final UserService userService;
 
     public ProfileController(UserService userService) {
@@ -20,14 +25,13 @@ public class ProfileController {
     }
 
     @GetMapping("/profile")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<?> getProfile() {
-        return ResponseEntity.ok(userService.getCurrentUserProfile());
+    public UserProfileResponse getProfile(Authentication authentication) {
+        return UserProfileResponse.from(userService.currentUser(authentication));
     }
 
     @PutMapping("/profile")
-    @PreAuthorize("hasRole('ROLE_USER')")
-    public ResponseEntity<?> updateProfile(@RequestParam String mailId) {
-        return ResponseEntity.ok(userService.updateUserProfile(mailId));
+    public UserProfileResponse updateProfile(Authentication authentication,
+            @RequestParam @NotBlank @Email @Size(max = 254) String mailId) {
+        return UserProfileResponse.from(userService.updateEmail(authentication, mailId));
     }
 }

@@ -7,5 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.diyncrafts.web.app.model.EditorPick;
 
 public interface EditorPickRepository extends JpaRepository<EditorPick, Long> {
+
     Optional<EditorPick> findTopByOrderByIdDesc();
+
+    void deleteByVideoId(Long videoId);
 }

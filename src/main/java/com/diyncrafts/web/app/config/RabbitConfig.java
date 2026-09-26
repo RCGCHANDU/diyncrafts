@@ -1,67 +1,50 @@
 package com.diyncrafts.web.app.config;
 
-import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
-import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
-import org.springframework.amqp.rabbit.connection.ConnectionFactory;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+/**
+ * RabbitMQ topology for transcoding. Connection, template and listener container come from Spring
+ * Boot ({@code spring.rabbitmq.*}, including listener retry); Boot applies the {@link MessageConverter}
+ * and the {@code TranscodingFailureRecoverer} bean.
+ * <p>
+ * The job queue is a quorum queue with a delivery limit, so a message whose processing keeps crashing
+ * the worker is dead-lettered by the broker instead of being redelivered forever. Rejected messages
+ * (retries exhausted, unreadable payloads) go to {@value #TRANSCODING_DLQ} for inspection.
+ * <p>
+ * These names replace the legacy {@code transcoding.queue}; queue arguments cannot be changed on an
+ * existing queue, so a new name was required.
+ */
 @Configuration
+@EnableScheduling
 public class RabbitConfig {
-    @Value("${spring.rabbitmq.host}")
-    private String host;
 
-    @Value("${spring.rabbitmq.username}")
-    private String username;
-
-    @Value("${spring.rabbitmq.password}")
-    private String password;
-
-    @Bean
-    public ConnectionFactory connectionFactory() {
-        CachingConnectionFactory connectionFactory = new CachingConnectionFactory(host);
-        connectionFactory.setUsername(username);
-        connectionFactory.setPassword(password);
-        return connectionFactory;
-    }
-
-    @Bean
-    public AmqpAdmin amqpAdmin(ConnectionFactory connectionFactory) {
-        return new RabbitAdmin(connectionFactory);
-    }
+    public static final String TRANSCODING_QUEUE = "diyncrafts.transcoding";
+    public static final String TRANSCODING_DLQ = "diyncrafts.transcoding.dlq";
+    static final int DELIVERY_LIMIT = 3;
 
     @Bean
     public Queue transcodingQueue() {
-        return new Queue("transcoding.queue", true); // 'true' makes it durable
-    }
-
-        @Bean
-    public SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory(
-            ConnectionFactory connectionFactory,
-            Jackson2JsonMessageConverter messageConverter
-            ) {
-        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(connectionFactory);
-        factory.setMessageConverter(messageConverter);
-        factory.setConcurrentConsumers(3); // Adjust based on load
-        return factory;
+        return QueueBuilder.durable(TRANSCODING_QUEUE)
+                .quorum()
+                .deliveryLimit(DELIVERY_LIMIT)
+                .deadLetterExchange("")
+                .deadLetterRoutingKey(TRANSCODING_DLQ)
+                .build();
     }
 
     @Bean
-    public Jackson2JsonMessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+    public Queue transcodingDeadLetterQueue() {
+        return QueueBuilder.durable(TRANSCODING_DLQ).build();
     }
 
     @Bean
-    public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
-        RabbitTemplate template = new RabbitTemplate(connectionFactory);
-        template.setMessageConverter(jsonMessageConverter());
-        return template;
+    public MessageConverter jsonMessageConverter() {
+        return new JacksonJsonMessageConverter();
     }
 }

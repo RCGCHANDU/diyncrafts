@@ -1,0 +1,103 @@
+# Base configuration. Contains NO credentials: supply them through environment variables
+# (see .env.example and README). Spring maps e.g. SPRING_DATASOURCE_PASSWORD -> spring.datasource.password.
+spring:
+  application:
+    name: diyncrafts
+  datasource:
+    url: jdbc:mysql://localhost:3306/diyncraftshub
+    # username/password: SPRING_DATASOURCE_USERNAME / SPRING_DATASOURCE_PASSWORD
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Schema changes are made by Flyway migrations (src/main/resources/db/migration) only.
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    # Databases created by the old ddl-auto=update setup are adopted as version 1 (the legacy schema).
+    baseline-on-migrate: true
+    baseline-version: 1
+  data:
+    web:
+      pageable:
+        default-page-size: 12
+        max-page-size: 100
+  elasticsearch:
+    uris: http://localhost:9200
+    # username/password: SPRING_ELASTICSEARCH_USERNAME / SPRING_ELASTICSEARCH_PASSWORD
+  rabbitmq:
+    host: localhost
+    port: 5672
+    # username/password: SPRING_RABBITMQ_USERNAME / SPRING_RABBITMQ_PASSWORD
+    listener:
+      simple:
+        # Transcoding is CPU heavy: one job per instance at a time, fetched one by one.
+        concurrency: 1
+        max-concurrency: 1
+        prefetch: 1
+        # Never requeue a failed message (that caused endless redelivery loops); reject → DLQ.
+        default-requeue-rejected: false
+        retry:
+          # Infrastructure failures (S3, database) are retried in-process, then TranscodingFailureRecoverer
+          # fails the task and dead-letters the message. Processing failures are not retried.
+          enabled: true
+          max-retries: 2
+          initial-interval: 10s
+          multiplier: 3
+          max-interval: 1m
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+
+app:
+  jwt:
+    # secret: APP_JWT_SECRET (required, >= 32 characters, e.g. `openssl rand -base64 48`)
+    expiration: 1h
+    issuer: diyncrafts
+  cors:
+    allowed-origins: http://localhost:5173
+  websocket:
+    relay:
+      enabled: false
+  storage:
+    bucket: diyncrafts-storage
+    region: eu-west-2
+    # endpoint: http://localhost:9000   # S3-compatible services (MinIO, LocalStack)
+    # path-style-access: true
+    # public-base-url: https://cdn.example.com
+  search:
+    initialize-index: true
+  transcoding:
+    work-dir: ${java.io.tmpdir}/diyncrafts
+    ffmpeg-path: ffmpeg
+    ffprobe-path: ffprobe
+    # libx264 (CPU, default) or h264_nvenc (NVIDIA GPU; needs an NVENC-enabled ffmpeg)
+    encoder: libx264
+    # preset: veryfast        # default depends on the encoder (libx264: veryfast, NVENC: p5)
+    segment-seconds: 7
+    # Must stay below RabbitMQ's consumer_timeout (30 min by default; docker-compose raises it),
+    # otherwise the broker redelivers the job while it is still running.
+    timeout: 25m
+    renditions:
+      - { short-side: 1080, bitrate: 5M, max-rate: 6M, buffer-size: 10M }
+      - { short-side: 720, bitrate: 3M, max-rate: 3500k, buffer-size: 6M }
+      - { short-side: 480, bitrate: 1500k, max-rate: 1800k, buffer-size: 3M }
+      - { short-side: 360, bitrate: 800k, max-rate: 1M, buffer-size: 2M }
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only health and info are exposed over HTTP (both public); everything else stays off.
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      # /actuator/health/liveness and /actuator/health/readiness for orchestrators.
+      probes:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
