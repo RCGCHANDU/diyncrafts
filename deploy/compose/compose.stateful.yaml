@@ -66,7 +66,7 @@ services:
 
   elasticsearch:
     <<: *hardening
-    image: elasticsearch:9.4.5@sha256:b0af55a1f3a9d3b80d5036ffa09007fab97da124d2ab6438410c33a1d19b3d8f
+    image: elasticsearch:9.5.3@sha256:a4e2b3d21ad0f779f3044bb6828b5289d5f1c241b3ddd7efae7adaf81bcff412
     environment:
       discovery.type: single-node
       xpack.security.enabled: "true"
