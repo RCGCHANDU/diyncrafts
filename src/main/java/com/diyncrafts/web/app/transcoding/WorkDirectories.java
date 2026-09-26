@@ -16,6 +16,8 @@ import com.diyncrafts.web.app.storage.ObjectKeys;
 
 /**
  * Per-task scratch space: {@code {workDir}/{taskId}/input} and {@code {workDir}/{taskId}/output/}.
+ * Multipart uploads are buffered in {@code {workDir}/.multipart} (see {@code spring.servlet.multipart.location})
+ * so that moving an upload into its task directory is a rename on the same filesystem, not a copy.
  */
 @Component
 public class WorkDirectories {
@@ -24,8 +26,23 @@ public class WorkDirectories {
 
     private final Path root;
 
+    static final String MULTIPART_DIR = ".multipart";
+
     public WorkDirectories(TranscodingProperties properties) {
         this.root = properties.workDir().toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(root.resolve(MULTIPART_DIR));
+        } catch (IOException e) {
+            log.warn("Could not create work directory {}; uploads and transcoding will fail until it exists", root, e);
+        }
+    }
+
+    /**
+     * Bytes available to this process on the scratch filesystem.
+     */
+    public long usableSpace() throws IOException {
+        Files.createDirectories(root);
+        return Files.getFileStore(root).getUsableSpace();
     }
 
     public Path taskDir(String taskId) {

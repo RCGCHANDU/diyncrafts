@@ -1,0 +1,5 @@
+# Accepted vulnerability exceptions for the image scan (CI fails on fixable HIGH/CRITICAL).
+# Only add an entry with: the CVE ID, why it does not apply or cannot be fixed yet, who accepted it,
+# and a review date, e.g.
+#   # Not reachable: we never call X. Accepted by <name> 2026-10-01, review by 2026-11-01.
+#   CVE-0000-00000

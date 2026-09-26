@@ -1,0 +1,28 @@
+# Production-style defaults shared by every deployed environment (staging and production).
+# Environment-specific values (URLs, hosts, credentials) come from environment variables; see
+# docs/deployment/ENVIRONMENTS.md.
+server:
+  # Trust X-Forwarded-* from the edge proxy. Tomcat's RemoteIpValve only accepts them from private
+  # network addresses (the proxy on the internal network), never from arbitrary clients.
+  forward-headers-strategy: native
+  tomcat:
+    # Socket read timeout: a client that stops sending mid-upload for this long is disconnected.
+    connection-timeout: 60s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # /actuator/prometheus is for the internal scrape network only; the edge routes just /api and /ws.
+        include: health,info,prometheus
+
+logging:
+  structured:
+    # One JSON object per line on stdout (Elastic Common Schema), including MDC such as taskId.
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: diyncrafts
+        version: ${info.app.revision:unknown}
+        environment: ${APP_ENVIRONMENT:production}

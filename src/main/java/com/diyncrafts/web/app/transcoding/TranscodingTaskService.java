@@ -1,6 +1,7 @@
 package com.diyncrafts.web.app.transcoding;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,11 +38,14 @@ public class TranscodingTaskService {
     private final TaskRepository taskRepository;
     private final VideoRepository videoRepository;
     private final Clock clock;
+    private final TranscodingMetrics metrics;
 
-    public TranscodingTaskService(TaskRepository taskRepository, VideoRepository videoRepository, Clock clock) {
+    public TranscodingTaskService(TaskRepository taskRepository, VideoRepository videoRepository, Clock clock,
+            TranscodingMetrics metrics) {
         this.taskRepository = taskRepository;
         this.videoRepository = videoRepository;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     public record TaskSnapshot(String taskId, Long videoId, String inputPath) {
@@ -63,9 +67,14 @@ public class TranscodingTaskService {
             return Optional.empty();
         }
         Long effectiveVideoId = task.getVideoId() != null ? task.getVideoId() : videoId;
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (task.getStatus() == TaskStatus.QUEUED && task.getStartTime() != null) {
+            // startTime holds the upload time until processing starts (retries are not queue wait).
+            metrics.started(Duration.between(task.getStartTime(), now));
+        }
         task.setStatus(TaskStatus.PROCESSING);
         task.setProgress(0);
-        task.setStartTime(LocalDateTime.now(clock));
+        task.setStartTime(now);
         task.setEndTime(null);
         task.setErrorDetails(null);
         log.info("Task {} state -> PROCESSING (video {})", taskId, effectiveVideoId);
@@ -104,6 +113,7 @@ public class TranscodingTaskService {
         task.setProgress(100);
         task.setOutputLocation(manifestUrl);
         task.setEndTime(LocalDateTime.now(clock));
+        metrics.finished(true, processingTime(task));
         log.info("Task {} state -> COMPLETED", taskId);
         return Optional.of(VideoElasticSearch.from(video.get()));
     }
@@ -136,10 +146,17 @@ public class TranscodingTaskService {
     }
 
     private void markFailed(Task task, String message) {
+        boolean wasProcessing = task.getStatus() == TaskStatus.PROCESSING;
         task.setStatus(TaskStatus.FAILED);
         task.setErrorDetails(message.length() > MAX_ERROR_LENGTH ? message.substring(0, MAX_ERROR_LENGTH) : message);
         task.setEndTime(LocalDateTime.now(clock));
+        metrics.finished(false, wasProcessing ? processingTime(task) : null);
         log.info("Task {} state -> FAILED: {}", task.getTaskId(), task.getErrorDetails());
+    }
+
+    private static Duration processingTime(Task task) {
+        return task.getStartTime() == null || task.getEndTime() == null ? null
+                : Duration.between(task.getStartTime(), task.getEndTime());
     }
 
     private static boolean isTerminal(TaskStatus status) {

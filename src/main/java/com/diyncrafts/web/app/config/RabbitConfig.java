@@ -1,9 +1,14 @@
 package com.diyncrafts.web.app.config;
 
+import java.time.Duration;
+
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.rabbit.config.ContainerCustomizer;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -41,6 +46,18 @@ public class RabbitConfig {
     @Bean
     public Queue transcodingDeadLetterQueue() {
         return QueueBuilder.durable(TRANSCODING_DLQ).build();
+    }
+
+    /**
+     * How long a stopping listener container waits for the in-flight job before closing its channel
+     * (the message is then redelivered). Spring AMQP's default is 5 s, which would abandon every
+     * running ffmpeg job on a routine restart; the worker role raises this above
+     * {@code app.transcoding.timeout} together with {@code spring.lifecycle.timeout-per-shutdown-phase}.
+     */
+    @Bean
+    public ContainerCustomizer<SimpleMessageListenerContainer> transcodingShutdownCustomizer(
+            @Value("${app.transcoding.shutdown-timeout:25s}") Duration shutdownTimeout) {
+        return container -> container.setShutdownTimeout(shutdownTimeout.toMillis());
     }
 
     @Bean

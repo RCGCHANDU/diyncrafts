@@ -1,0 +1,11 @@
+# Test-only S3-compatible storage for deploy/test/run-stack-test.sh. Never used in real environments.
+name: diyncrafts-test
+services:
+  s3mock:
+    image: adobe/s3mock:5.2.3
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: diyncrafts-test
+networks:
+  default:
+    name: diyncrafts
+    external: true

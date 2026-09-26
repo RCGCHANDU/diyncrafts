@@ -152,6 +152,42 @@ Stop the dependencies with `docker compose down` (add `-v` to delete their data)
   - The transcoding pipeline through RabbitMQ 4.3: delivery, retries, dead-lettering.
 
 CI (`.github/workflows/ci.yml`) installs ffmpeg and runs `./mvnw verify` on every push and pull request.
+It also checks the deployment files (ShellCheck, Compose, Caddyfile), and builds and scans the image
+(Trivy: fixable HIGH/CRITICAL fail the build). On `main`, it publishes the image to GHCR by digest.
+
+## Deployment
+
+The production image and the deployment stack live in this repository:
+
+- **Image**: `Dockerfile` (multi-stage). Maven build, then the Temurin 17 JRE on Ubuntu 24.04 with
+  distribution `ffmpeg`/`ffprobe` (libx264, AAC, NVENC-capable). It runs as UID 10001 with a
+  read-only application directory, has a readiness `HEALTHCHECK`, and passes shutdown signals
+  straight to the JVM. `docker build -t diyncrafts-backend .` needs nothing but Docker.
+- **Published images**: `ghcr.io/rcgchandu/diyncrafts:sha-<commit>`, with an SBOM and provenance
+  attached. Deployments always use the digest (`…@sha256:…`), never a moving tag.
+- **Runtime roles** (same image, chosen by profile):
+  - `SPRING_PROFILES_ACTIVE=prod,api`: HTTP and WebSocket, uploads, Flyway migrations; no job
+    consumer. Graceful shutdown lets in-flight requests finish (2 min).
+  - `SPRING_PROFILES_ACTIVE=prod,worker`: consumes transcoding jobs. On shutdown it stops taking jobs
+    and finishes the running one (up to 30 min). No Flyway.
+  - No role profile (local development): one process does both.
+
+  Separate roles need `APP_WEBSOCKET_RELAY_ENABLED=true` (RabbitMQ STOMP) and a **shared scratch
+  volume** for `APP_TRANSCODING_WORK_DIR`, because uploads are handed to the worker through it.
+- **Health**: `/actuator/health/liveness`, `/actuator/health/readiness`, and `/actuator/info`
+  (includes the commit). `prod` also exposes `/actuator/prometheus` for the internal network only.
+  The edge proxy never routes `/actuator`.
+- **Scratch storage**: uploads are refused with 503 when accepting one would leave less than
+  `APP_TRANSCODING_MIN_FREE_SPACE` (default 2 GB) free.
+- **Logs**: `prod` writes one JSON object per line (ECS), with version, environment and `taskId`.
+- **Stack**: `deploy/`. A single Docker host with the Caddy edge (HTTPS, `/`, `/api`, `/ws`, 2 GiB
+  uploads), blue/green API and workers, and managed or optional on-host MySQL, RabbitMQ and
+  Elasticsearch. The Deploy workflow deploys to staging after every green `main`. Production is an
+  approved promotion of the staging digests.
+
+Read next: [architecture and decisions](docs/deployment/ARCHITECTURE.md),
+[environments and secrets](docs/deployment/ENVIRONMENTS.md), [runbook](docs/deployment/RUNBOOK.md),
+[release checklist](docs/deployment/RELEASE_CHECKLIST.md).
 
 ## Video pipeline
 
@@ -277,8 +313,8 @@ These cannot be done by code changes and must be done by someone with access:
    - The index is now `videos_v2`, with explicit mappings. After deploying, call
      `POST /api/admin/search/reindex` as an admin.
    - The old `videos` index can then be deleted.
-6. The application needs ffmpeg/ffprobe on the host or container image. Spring Boot's
-   `build-image` does not include them.
+6. The application needs ffmpeg/ffprobe on the host or in the container image. The repository's
+   `Dockerfile` includes them; Spring Boot's `build-image` does not.
 
 ## Compatibility notes for API clients
 

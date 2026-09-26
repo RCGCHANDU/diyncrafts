@@ -23,4 +23,6 @@ public interface TaskRepository extends JpaRepository<Task, String> {
             @Param("status") TaskStatus status);
 
     List<Task> findByStatusAndStartTimeBefore(TaskStatus status, LocalDateTime cutoff);
+
+    long countByStatus(TaskStatus status);
 }

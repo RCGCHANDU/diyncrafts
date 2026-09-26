@@ -1,0 +1,19 @@
+# Weekly dependency updates. Base images and actions are pinned by digest/SHA, so updates arrive as
+# reviewable pull requests (and run through CI, including the image scan) instead of silently.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      spring-boot:
+        patterns: ["org.springframework.boot*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker-compose
+    directory: /deploy/compose
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

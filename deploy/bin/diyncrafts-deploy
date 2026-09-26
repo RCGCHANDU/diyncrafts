@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+# Deploys DIYnCrafts images on a single Docker host (deploy/compose/compose.yaml).
+#
+#   diyncrafts-deploy deploy backend  <repository>@sha256:<digest>
+#   diyncrafts-deploy deploy frontend <repository>@sha256:<digest>
+#   diyncrafts-deploy rollback backend|frontend      redeploy the previously active digest
+#   diyncrafts-deploy status                         active digests, colours and container health
+#   diyncrafts-deploy redeploy backend               blue/green restart on the same digest (new secrets)
+#   diyncrafts-deploy edge                           (re)start the edge proxy after a config change
+#   diyncrafts-deploy --ssh                          forced-command mode, see below
+#
+# Backend deploys are blue/green: the idle colour starts with the new image (the API role runs any
+# Flyway migrations), and the old API colour is stopped only once the new one is healthy. The edge
+# balances over both colours with an active readiness check, so traffic moves without failed
+# requests. Workers switch after the API. The old worker keeps its running job until it finishes
+# (up to 31 minutes) and then exits in the background.
+#
+# Only images from the configured repositories, pinned by digest, are accepted.
+#
+# Exit codes: 0 deployed; 10 already running that digest (nothing changed); 3 aborted before
+# switching (previous version still active); 1 other errors, including a worker that failed after the
+# API switched (roll back).
+#
+# Forced-command mode: put this in the deploy user's ~/.ssh/authorized_keys so the CI key can only
+# run this script (the command comes from SSH_ORIGINAL_COMMAND and is validated here):
+#   command="/usr/local/bin/diyncrafts-deploy --ssh",restrict ssh-ed25519 AAAA... ci-deploy
+set -euo pipefail
+
+DIYNCRAFTS_HOME=${DIYNCRAFTS_HOME:-/opt/diyncrafts}
+DIYNCRAFTS_ETC=${DIYNCRAFTS_ETC:-/etc/diyncrafts}
+DIYNCRAFTS_STATE=${DIYNCRAFTS_STATE:-/var/lib/diyncrafts-deploy}
+HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-300}
+# Longest a still-draining worker is waited for (its stop_grace_period is 32m).
+DRAIN_WAIT_TIMEOUT=${DRAIN_WAIT_TIMEOUT:-2000}
+
+STACK_ENV="$DIYNCRAFTS_ETC/stack.env"
+IMAGES_ENV="$DIYNCRAFTS_STATE/images.env"
+LOG_FILE="$DIYNCRAFTS_STATE/deploy.log"
+
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
+die() { log "ERROR: $*"; exit 1; }
+# Exit code 3: the deploy was aborted and the previously active version is still in place, so there
+# is nothing to roll back. Any other non-zero code after a switch may need a rollback.
+abort() { log "ABORTED: $*"; exit 3; }
+record() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"; }
+
+usage() {
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2
+  exit 2
+}
+
+# Reads KEY=value lines without evaluating them as shell code.
+env_value() {
+  local file=$1 key=$2
+  [[ -f $file ]] || return 0
+  sed -n "s/^${key}=//p" "$file" | tail -n 1
+}
+
+state() { env_value "$IMAGES_ENV" "$1"; }
+
+write_state() {
+  # Usage: write_state FILE KEY=value ...; keys not given keep their current value.
+  local file=$1; shift
+  local keys=(BLUE_BACKEND_IMAGE GREEN_BACKEND_IMAGE ACTIVE_COLOR PREVIOUS_BACKEND_IMAGE FRONTEND_IMAGE PREVIOUS_FRONTEND_IMAGE)
+  declare -A values=()
+  local k
+  for k in "${keys[@]}"; do values[$k]=$(state "$k"); done
+  local pair
+  for pair in "$@"; do values[${pair%%=*}]=${pair#*=}; done
+  local tmp
+  tmp=$(mktemp "$DIYNCRAFTS_STATE/.images.XXXXXX")
+  {
+    echo "# Written by diyncrafts-deploy. Do not edit while a deploy is running."
+    for k in "${keys[@]}"; do echo "$k=${values[$k]}"; done
+  } >"$tmp"
+  chmod 0644 "$tmp"
+  mv -f "$tmp" "$file"
+}
+
+compose() {
+  local images=${COMPOSE_IMAGES_ENV:-$IMAGES_ENV}
+  docker compose \
+    --project-directory "$DIYNCRAFTS_HOME/compose" \
+    -f "$DIYNCRAFTS_HOME/compose/compose.yaml" \
+    --env-file "$STACK_ENV" \
+    --env-file "$images" \
+    "$@"
+}
+
+container_of() { compose ps -a -q "$1" 2>/dev/null | head -n 1; }
+
+is_running() {
+  local id
+  id=$(container_of "$1")
+  [[ -n $id ]] && [[ $(docker inspect -f '{{.State.Running}}' "$id") == true ]]
+}
+
+wait_healthy() {
+  local service=$1 deadline=$((SECONDS + HEALTH_TIMEOUT)) id status
+  id=$(container_of "$service")
+  [[ -n $id ]] || { log "$service: no container"; return 1; }
+  while ((SECONDS < deadline)); do
+    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id")
+    case $status in
+      healthy) log "$service: healthy"; return 0 ;;
+      unhealthy | exited | dead) log "$service: $status"; docker logs --tail 50 "$id" >&2 || true; return 1 ;;
+    esac
+    sleep 3
+  done
+  log "$service: not healthy after ${HEALTH_TIMEOUT}s"
+  docker logs --tail 50 "$id" >&2 || true
+  return 1
+}
+
+revision_of() {
+  local id
+  id=$(container_of "$1")
+  [[ -n $id ]] || return 0
+  docker exec "$id" curl -fsS http://127.0.0.1:8080/actuator/info 2>/dev/null |
+    sed -n 's/.*"revision":"\([^"]*\)".*/\1/p' || true
+}
+
+validate_ref() {
+  local ref=$1 repository=$2
+  [[ -n $repository ]] || die "repository not configured in $STACK_ENV"
+  [[ $ref =~ ^${repository//./\\.}@sha256:[0-9a-f]{64}$ ]] ||
+    abort "refusing '$ref': expected ${repository}@sha256:<64 hex digits> (tags such as :latest are never deployed)"
+}
+
+pull() {
+  log "pulling $1"
+  docker pull --quiet "$1" >/dev/null || abort "cannot pull $1 (registry login? see RUNBOOK.md)"
+}
+
+ensure_network() {
+  docker network inspect diyncrafts >/dev/null 2>&1 || docker network create diyncrafts >/dev/null
+}
+
+other_color() { [[ $1 == blue ]] && echo green || echo blue; }
+
+deploy_backend() {
+  local ref=$1
+  validate_ref "$ref" "$(env_value "$STACK_ENV" BACKEND_REPOSITORY)"
+  pull "$ref"
+  ensure_network
+
+  local active target current
+  active=$(state ACTIVE_COLOR)
+  if [[ -z $active ]]; then target=blue; else target=$(other_color "$active"); fi
+  current=""
+  if [[ -n $active ]]; then current=$(state "${active^^}_BACKEND_IMAGE"); fi
+  if [[ $ref == "$current" && -z ${FORCE:-} ]]; then log "backend already running $ref ($active)"; exit 10; fi
+
+  log "backend: ${active:-none} -> $target ($ref)"
+  local next="$DIYNCRAFTS_STATE/images.next.env"
+  write_state "$next" "${target^^}_BACKEND_IMAGE=$ref"
+
+  # 1. New API colour. It runs Flyway before reporting ready.
+  if is_running "api-$target"; then compose rm -f -s "api-$target" >/dev/null; fi
+  if ! COMPOSE_IMAGES_ENV=$next compose up -d --no-deps "api-$target" || ! wait_healthy "api-$target"; then
+    COMPOSE_IMAGES_ENV=$next compose rm -f -s "api-$target" >/dev/null || true
+    rm -f "$next"
+    record "deploy backend $ref FAILED (api-$target not healthy); ${active:-nothing} still serving"
+    abort "new API colour did not become healthy; the previous version keeps serving traffic"
+  fi
+  log "api-$target revision: $(revision_of "api-$target")"
+
+  # 2. Retire the old API colour (graceful: in-flight requests finish, up to 2 minutes).
+  if [[ -n $active ]]; then
+    log "stopping api-$active"
+    COMPOSE_IMAGES_ENV=$next compose stop "api-$active" >/dev/null
+    COMPOSE_IMAGES_ENV=$next compose rm -f "api-$active" >/dev/null
+  fi
+  # A forced redeploy of the same digest keeps the existing rollback target.
+  local previous=$current
+  if [[ $ref == "$current" ]]; then previous=$(state PREVIOUS_BACKEND_IMAGE); fi
+  write_state "$IMAGES_ENV" "${target^^}_BACKEND_IMAGE=$ref" "ACTIVE_COLOR=$target" \
+    "PREVIOUS_BACKEND_IMAGE=$previous"
+  rm -f "$next"
+  record "deploy backend $ref api-$target OK (previous: ${current:-none})"
+
+  # 3. Workers. A worker of the target colour may still be draining after an earlier deploy.
+  local target_worker="worker-$target"
+  if is_running "$target_worker"; then
+    log "$target_worker is still draining its last job; waiting (the old worker keeps consuming)"
+    local id
+    id=$(container_of "$target_worker")
+    timeout "$DRAIN_WAIT_TIMEOUT" docker wait "$id" >/dev/null || die "$target_worker did not finish draining"
+  fi
+  compose rm -f "$target_worker" >/dev/null 2>&1 || true
+  if ! compose up -d --no-deps "$target_worker" || ! wait_healthy "$target_worker"; then
+    compose rm -f -s "$target_worker" >/dev/null || true
+    record "deploy backend $ref FAILED ($target_worker not healthy); worker-${active:-none} still consuming"
+    die "new worker did not become healthy; the API is on the new version, the old worker keeps consuming. Roll back with: diyncrafts-deploy rollback backend"
+  fi
+
+  # 4. The old worker stops taking jobs now and exits once its running job is done (up to 31 min).
+  if [[ -n $active ]] && is_running "worker-$active"; then
+    log "worker-$active: draining in the background (see $DIYNCRAFTS_STATE/drain.log)"
+    local project_args
+    project_args=$(printf '%q ' --project-directory "$DIYNCRAFTS_HOME/compose" -f "$DIYNCRAFTS_HOME/compose/compose.yaml" --env-file "$STACK_ENV" --env-file "$IMAGES_ENV")
+    setsid nohup bash -c "docker compose $project_args stop worker-$active && docker compose $project_args rm -f worker-$active" \
+      >>"$DIYNCRAFTS_STATE/drain.log" 2>&1 </dev/null &
+  fi
+  record "deploy backend $ref worker-$target OK"
+  log "backend deployed: $ref ($target)"
+}
+
+deploy_frontend() {
+  local ref=$1
+  validate_ref "$ref" "$(env_value "$STACK_ENV" FRONTEND_REPOSITORY)"
+  pull "$ref"
+  ensure_network
+  local current
+  current=$(state FRONTEND_IMAGE)
+  [[ $ref == "$current" ]] && { log "frontend already running $ref"; exit 10; }
+
+  write_state "$IMAGES_ENV" "FRONTEND_IMAGE=$ref" "PREVIOUS_FRONTEND_IMAGE=$current"
+  # The edge retries for a few seconds while the container is replaced.
+  if ! compose up -d --no-deps frontend || ! wait_healthy frontend; then
+    if [[ -n $current ]]; then
+      write_state "$IMAGES_ENV" "FRONTEND_IMAGE=$current" "PREVIOUS_FRONTEND_IMAGE=$(state PREVIOUS_FRONTEND_IMAGE)"
+      compose up -d --no-deps frontend || true
+    fi
+    record "deploy frontend $ref FAILED; restored ${current:-nothing}"
+    abort "frontend did not become healthy; restored the previous image"
+  fi
+  record "deploy frontend $ref OK (previous: ${current:-none})"
+  log "frontend deployed: $ref"
+}
+
+rollback() {
+  local previous
+  case $1 in
+    backend) previous=$(state PREVIOUS_BACKEND_IMAGE) ;;
+    frontend) previous=$(state PREVIOUS_FRONTEND_IMAGE) ;;
+    *) usage ;;
+  esac
+  [[ -n $previous ]] || die "no previous $1 image recorded"
+  log "rolling back $1 to $previous"
+  record "rollback $1 -> $previous"
+  "deploy_$1" "$previous"
+}
+
+status() {
+  local active
+  active=$(state ACTIVE_COLOR)
+  echo "active backend colour: ${active:-none}"
+  echo "backend:           $( [[ -n $active ]] && state "${active^^}_BACKEND_IMAGE")"
+  echo "previous backend:  $(state PREVIOUS_BACKEND_IMAGE)"
+  echo "frontend:          $(state FRONTEND_IMAGE)"
+  echo "previous frontend: $(state PREVIOUS_FRONTEND_IMAGE)"
+  if [[ -n $active ]]; then echo "api-$active revision: $(revision_of "api-$active")"; fi
+  compose ps --format 'table {{.Service}}\t{{.Status}}'
+}
+
+edge() {
+  ensure_network
+  compose up -d --no-deps edge
+  wait_healthy edge
+}
+
+main() {
+  [[ -f $STACK_ENV ]] || die "missing $STACK_ENV (copy deploy/compose/stack.env.example)"
+  mkdir -p "$DIYNCRAFTS_STATE"
+  [[ -f $IMAGES_ENV ]] || write_state "$IMAGES_ENV"
+
+  local command=${1:-}
+  if [[ $command == --ssh ]]; then
+    local original=${SSH_ORIGINAL_COMMAND:-}
+    [[ $original =~ ^[A-Za-z0-9@:/._\ -]{1,300}$ ]] || die "rejected command"
+    read -r -a words <<<"$original"
+    set -- "${words[@]}"
+    command=${1:-}
+    [[ $command =~ ^(deploy|rollback|status)$ ]] || die "command not allowed over SSH: $command"
+  fi
+
+  # One deploy at a time.
+  exec 9>"$DIYNCRAFTS_STATE/.lock"
+  flock -w 60 9 || abort "another deploy is running"
+
+  case $command in
+    deploy)
+      [[ $# -eq 3 ]] || usage
+      case $2 in
+        backend) deploy_backend "$3" ;;
+        frontend) deploy_frontend "$3" ;;
+        *) usage ;;
+      esac
+      ;;
+    rollback) [[ $# -eq 2 ]] || usage; rollback "$2" ;;
+    redeploy)
+      [[ $# -eq 2 && $2 == backend ]] || usage
+      local active
+      active=$(state ACTIVE_COLOR)
+      [[ -n $active ]] || abort "nothing deployed yet"
+      FORCE=1 deploy_backend "$(state "${active^^}_BACKEND_IMAGE")"
+      ;;
+    status) status ;;
+    edge) edge ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"

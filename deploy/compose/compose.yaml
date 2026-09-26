@@ -1,0 +1,138 @@
+# DIYnCrafts application stack for staging and production on a single Docker host.
+#
+# NOT the local development file: that is docker-compose.yml in the repository root.
+#
+# Do not run this file by hand for deploys. deploy/bin/diyncrafts-deploy runs it with:
+#   --env-file ${DIYNCRAFTS_ETC}/stack.env          (host settings, see stack.env.example)
+#   --env-file ${DIYNCRAFTS_STATE}/images.env       (image digests, written by the deploy script)
+# Stateful services (MySQL, RabbitMQ, Elasticsearch) are external. For staging or a very small
+# production, compose.stateful.yaml can run them on the same host.
+#
+# Secrets never appear in this file or in images:
+#   ${SECRETS_DIR}/backend/<property.name>   one file per Spring property (Spring "configtree"),
+#                                            e.g. app.jwt.secret, spring.datasource.password
+#   ${SECRETS_DIR}/aws.env                   optional static AWS keys (prefer an instance role)
+name: diyncrafts
+
+x-hardening: &hardening
+  restart: unless-stopped
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: local
+    options:
+      max-size: 50m
+      max-file: "5"
+
+x-backend: &backend
+  <<: *hardening
+  env_file:
+    - path: ${DIYNCRAFTS_ETC:-/etc/diyncrafts}/backend.env
+    - path: ${SECRETS_DIR:-/etc/diyncrafts/secrets}/aws.env
+      required: false
+  tmpfs:
+    - /tmp:size=256m,uid=10001,gid=10001,mode=0700
+  volumes:
+    # Upload scratch shared by API and worker (uploads are handed over through this directory).
+    # Put ${DATA_DIR} on its own filesystem so a full scratch disk cannot fill the host's root disk.
+    - ${DATA_DIR:-/var/lib/diyncrafts}/work:/var/lib/diyncrafts/work
+    - ${SECRETS_DIR:-/etc/diyncrafts/secrets}/backend:/run/secrets/diyncrafts:ro
+  pids_limit: 512
+
+x-api-environment: &api-environment
+  SPRING_PROFILES_ACTIVE: prod,api
+  SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/diyncrafts/
+  APP_ENVIRONMENT: ${APP_ENVIRONMENT:?set APP_ENVIRONMENT in stack.env}
+  APP_WEBSOCKET_RELAY_ENABLED: "true"
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Djava.io.tmpdir=/tmp
+
+x-worker-environment: &worker-environment
+  SPRING_PROFILES_ACTIVE: prod,worker
+  SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/diyncrafts/
+  APP_ENVIRONMENT: ${APP_ENVIRONMENT:?set APP_ENVIRONMENT in stack.env}
+  APP_WEBSOCKET_RELAY_ENABLED: "true"
+  # ffmpeg runs in the same memory limit as the JVM, so the heap gets a smaller share.
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError -Djava.io.tmpdir=/tmp
+
+x-api: &api
+  <<: *backend
+  environment: *api-environment
+  # Above spring.lifecycle.timeout-per-shutdown-phase (2m in the api profile).
+  stop_grace_period: 150s
+  mem_limit: ${API_MEMORY:-2g}
+  cpus: ${API_CPUS:-1.5}
+
+x-worker: &worker
+  <<: *backend
+  environment: *worker-environment
+  # Above spring.lifecycle.timeout-per-shutdown-phase (31m in the worker profile): a deploy lets
+  # the running transcoding job finish.
+  stop_grace_period: 32m
+  mem_limit: ${WORKER_MEMORY:-3g}
+  cpus: ${WORKER_CPUS:-2}
+
+services:
+  edge:
+    <<: *hardening
+    image: caddy:2.11-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    # Non-root; ${EDGE_DIR} must be owned by this UID (deploy/host/bootstrap.sh does that).
+    user: "10002:10002"
+    # The caddy binary carries this file capability to bind 80/443; nothing else is granted.
+    cap_add: [NET_BIND_SERVICE]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in stack.env}
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-2GiB}
+      UPLOAD_READ_TIMEOUT: ${UPLOAD_READ_TIMEOUT:-1h}
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${EDGE_SITES_DIR:-../caddy/sites.d}:/etc/caddy/sites.d:ro
+      - ${EDGE_DIR:-/var/lib/diyncrafts-edge}/data:/data
+      - ${EDGE_DIR:-/var/lib/diyncrafts-edge}/config:/config
+    tmpfs:
+      - /tmp:size=16m
+    mem_limit: 256m
+    healthcheck:
+      # Liveness of the Caddy process itself; the admin endpoint listens on localhost only.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  frontend:
+    <<: *hardening
+    image: ${FRONTEND_IMAGE:-frontend-image-not-deployed.invalid/none}
+    environment:
+      # Content-Security-Policy origins (public values, not secrets).
+      MEDIA_ORIGIN: ${MEDIA_ORIGIN:-}
+      API_ORIGIN: ${API_ORIGIN:-}
+    tmpfs:
+      - /tmp:size=16m,uid=101,gid=101
+      - /etc/nginx/conf.d:size=1m,uid=101,gid=101
+    mem_limit: 128m
+
+  # Blue/green: normally only one colour of each role runs. The deploy script starts the idle colour
+  # with the new image, waits until it is healthy, then stops the old one.
+  api-blue:
+    <<: *api
+    image: ${BLUE_BACKEND_IMAGE:-backend-image-not-deployed.invalid/none}
+  api-green:
+    <<: *api
+    image: ${GREEN_BACKEND_IMAGE:-backend-image-not-deployed.invalid/none}
+  worker-blue:
+    <<: *worker
+    image: ${BLUE_BACKEND_IMAGE:-backend-image-not-deployed.invalid/none}
+  worker-green:
+    <<: *worker
+    image: ${GREEN_BACKEND_IMAGE:-backend-image-not-deployed.invalid/none}
+
+networks:
+  # Created once by deploy/host/bootstrap.sh; shared with compose.stateful.yaml when that is used.
+  default:
+    name: diyncrafts
+    external: true

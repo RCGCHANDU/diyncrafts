@@ -1,0 +1,25 @@
+# Runtime role "worker": consumes transcoding jobs and runs ffmpeg. It receives no public traffic
+# (port 8080 serves only the Actuator probes) and must share the API's scratch volume, because
+# uploads are handed over through {app.transcoding.work-dir}/{taskId}/input.
+# Activate with SPRING_PROFILES_ACTIVE=prod,worker.
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: true
+  # Only the API role migrates. With ddl-auto=validate a worker refuses to start against a schema it
+  # does not match, so workers are started after the API has become ready.
+  flyway:
+    enabled: false
+  # Graceful shutdown: stop taking jobs, let the running one finish. Keep the platform's grace period
+  # (docker stop_grace_period, Kubernetes terminationGracePeriodSeconds) above this value.
+  lifecycle:
+    timeout-per-shutdown-phase: 31m
+
+app:
+  transcoding:
+    # Longer than app.transcoding.timeout (25m), so a running job is never cut short by a deploy.
+    shutdown-timeout: 30m
+  search:
+    # The API role creates the index.
+    initialize-index: false
