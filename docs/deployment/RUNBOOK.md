@@ -203,9 +203,8 @@ revoke the old one.
 
 - **Database, broker or search password**: create a second user (or a second password where the
   service supports it). Write the new value to `/etc/diyncrafts/secrets/backend/<property>` with the
-  same owner and mode. Redeploy the current digest with `diyncrafts-deploy rollback backend` twice,
-  or deploy the same digest again after `diyncrafts-deploy status`. Blue/green picks up the file.
-  Verify, then revoke the old credential.
+  same owner and mode. Run `diyncrafts-deploy redeploy backend`: a blue/green restart on the current
+  digest, which reads the new file. Verify, then revoke the old credential.
 - **`app.jwt.secret`**: replacing it invalidates all sessions, so everyone signs in again. Do it at a
   quiet time, or immediately if the secret leaked.
 - **CI deploy key**: add the new public key to `authorized_keys` (with the same forced command),

@@ -5,6 +5,7 @@
 #   diyncrafts-deploy deploy frontend <repository>@sha256:<digest>
 #   diyncrafts-deploy rollback backend|frontend      redeploy the previously active digest
 #   diyncrafts-deploy status                         active digests, colours and container health
+#   diyncrafts-deploy redeploy backend               blue/green restart on the same digest (new secrets)
 #   diyncrafts-deploy edge                           (re)start the edge proxy after a config change
 #   diyncrafts-deploy --ssh                          forced-command mode, see below
 #
@@ -16,8 +17,9 @@
 #
 # Only images from the configured repositories, pinned by digest, are accepted.
 #
-# Exit codes: 0 deployed; 3 aborted before switching (previous version still active); 1 other errors,
-# including a worker that failed after the API switched (roll back).
+# Exit codes: 0 deployed; 10 already running that digest (nothing changed); 3 aborted before
+# switching (previous version still active); 1 other errors, including a worker that failed after the
+# API switched (roll back).
 #
 # Forced-command mode: put this in the deploy user's ~/.ssh/authorized_keys so the CI key can only
 # run this script (the command comes from SSH_ORIGINAL_COMMAND and is validated here):
@@ -43,7 +45,7 @@ abort() { log "ABORTED: $*"; exit 3; }
 record() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$LOG_FILE"; }
 
 usage() {
-  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
@@ -147,7 +149,7 @@ deploy_backend() {
   if [[ -z $active ]]; then target=blue; else target=$(other_color "$active"); fi
   current=""
   if [[ -n $active ]]; then current=$(state "${active^^}_BACKEND_IMAGE"); fi
-  [[ $ref == "$current" ]] && { log "backend already running $ref ($active)"; return 0; }
+  if [[ $ref == "$current" && -z ${FORCE:-} ]]; then log "backend already running $ref ($active)"; exit 10; fi
 
   log "backend: ${active:-none} -> $target ($ref)"
   local next="$DIYNCRAFTS_STATE/images.next.env"
@@ -169,8 +171,11 @@ deploy_backend() {
     COMPOSE_IMAGES_ENV=$next compose stop "api-$active" >/dev/null
     COMPOSE_IMAGES_ENV=$next compose rm -f "api-$active" >/dev/null
   fi
+  # A forced redeploy of the same digest keeps the existing rollback target.
+  local previous=$current
+  if [[ $ref == "$current" ]]; then previous=$(state PREVIOUS_BACKEND_IMAGE); fi
   write_state "$IMAGES_ENV" "${target^^}_BACKEND_IMAGE=$ref" "ACTIVE_COLOR=$target" \
-    "PREVIOUS_BACKEND_IMAGE=${current}"
+    "PREVIOUS_BACKEND_IMAGE=$previous"
   rm -f "$next"
   record "deploy backend $ref api-$target OK (previous: ${current:-none})"
 
@@ -208,7 +213,7 @@ deploy_frontend() {
   ensure_network
   local current
   current=$(state FRONTEND_IMAGE)
-  [[ $ref == "$current" ]] && { log "frontend already running $ref"; return 0; }
+  [[ $ref == "$current" ]] && { log "frontend already running $ref"; exit 10; }
 
   write_state "$IMAGES_ENV" "FRONTEND_IMAGE=$ref" "PREVIOUS_FRONTEND_IMAGE=$current"
   # The edge retries for a few seconds while the container is replaced.
@@ -284,6 +289,13 @@ main() {
       esac
       ;;
     rollback) [[ $# -eq 2 ]] || usage; rollback "$2" ;;
+    redeploy)
+      [[ $# -eq 2 && $2 == backend ]] || usage
+      local active
+      active=$(state ACTIVE_COLOR)
+      [[ -n $active ]] || abort "nothing deployed yet"
+      FORCE=1 deploy_backend "$(state "${active^^}_BACKEND_IMAGE")"
+      ;;
     status) status ;;
     edge) edge ;;
     *) usage ;;

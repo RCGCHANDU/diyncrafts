@@ -184,10 +184,11 @@ jobs:
             esac
             code=0
             if [[ $ACTION == rollback ]]; then remote rollback "$c" || code=$?; else remote deploy "$c" "$ref" || code=$?; fi
-            # Exit code 3: aborted before switching, the previous version is still active.
-            if [[ $code != 3 ]]; then changed+=("$c"); echo "changed=${changed[*]}" >> "$GITHUB_OUTPUT"; fi
+            # Exit codes: 10 = already running this digest; 3 = aborted before switching (the
+            # previous version is still active). Neither changed anything that needs a rollback.
+            if [[ $code != 3 && $code != 10 ]]; then changed+=("$c"); echo "changed=${changed[*]}" >> "$GITHUB_OUTPUT"; fi
             echo "- $ACTION $c ${ref:-(previous digest)}: exit $code" >> "$GITHUB_STEP_SUMMARY"
-            [[ $code == 0 ]] || exit 1
+            [[ $code == 0 || $code == 10 ]] || exit 1
           done
           remote status | tee -a "$GITHUB_STEP_SUMMARY"
 
