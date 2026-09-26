@@ -58,7 +58,10 @@ jobs:
       - name: Compose files
         run: |
           docker network create diyncrafts
+          # The example files stand in for the host's /etc/diyncrafts.
+          export DIYNCRAFTS_ETC="$RUNNER_TEMP"
           cp deploy/compose/stack.env.example "$RUNNER_TEMP/stack.env"
+          cp deploy/compose/backend.env.example "$RUNNER_TEMP/backend.env"
           touch "$RUNNER_TEMP/images.env"
           docker compose -f deploy/compose/compose.yaml --env-file "$RUNNER_TEMP/stack.env" \
             --env-file "$RUNNER_TEMP/images.env" config --quiet
