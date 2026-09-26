@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 
 import com.diyncrafts.web.app.model.Guide;
 import com.diyncrafts.web.app.model.Task;
@@ -143,7 +143,7 @@ class OwnershipIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(post("/api/videos/999999/log-view")).andExpect(status().isNotFound());
     }
 
-    private static MockHttpServletRequestBuilder updateVideo(Video video) {
+    private static MockMultipartHttpServletRequestBuilder updateVideo(Video video) {
         return multipart(HttpMethod.PUT, "/api/videos/" + video.getId())
                 .param("title", "Better birdhouse")
                 .param("description", "Now with a roof")

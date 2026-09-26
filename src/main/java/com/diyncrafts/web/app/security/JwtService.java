@@ -31,7 +31,13 @@ public class JwtService {
 
     public String issueToken(String username, Collection<? extends GrantedAuthority> authorities) {
         Instant now = Instant.now();
-        List<String> roles = authorities.stream().map(GrantedAuthority::getAuthority).sorted().toList();
+        // Only roles go into the token. Spring Security 7 also adds authentication-factor authorities
+        // (e.g. FACTOR_PASSWORD) after login; those describe this login, not the user's permissions.
+        List<String> roles = authorities.stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(authority -> authority.startsWith("ROLE_"))
+                .sorted()
+                .toList();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
                 .subject(username)
