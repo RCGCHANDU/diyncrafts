@@ -18,22 +18,21 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.diyncrafts.web.app.model.Category;
 import com.diyncrafts.web.app.model.User;
 import com.diyncrafts.web.app.model.Video;
-import com.diyncrafts.web.app.repository.es.VideoElasticSearchRepository;
 import com.diyncrafts.web.app.repository.jpa.CategoryRepository;
 import com.diyncrafts.web.app.repository.jpa.EditorPickRepository;
 import com.diyncrafts.web.app.repository.jpa.GuideRepository;
 import com.diyncrafts.web.app.repository.jpa.TaskRepository;
 import com.diyncrafts.web.app.repository.jpa.UserRepository;
+import com.diyncrafts.web.app.repository.jpa.VideoDailyViewsRepository;
 import com.diyncrafts.web.app.repository.jpa.VideoRepository;
 import com.diyncrafts.web.app.security.JwtService;
-import com.diyncrafts.web.app.service.ThumbnailService;
-import com.diyncrafts.web.app.service.VideoS3StorageService;
 
-import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3Client;
 
 /**
- * Full application context on an in-memory database with all external services (Elasticsearch,
- * S3, RabbitMQ, ffmpeg) replaced by mocks, so the suite runs without infrastructure or credentials.
+ * Full application context on an in-memory database. S3 and RabbitMQ are mocked; Elasticsearch points
+ * at a closed port (index writes are best-effort, searches return 503). No infrastructure or
+ * credentials are needed.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,18 +61,16 @@ public abstract class IntegrationTestSupport {
     protected JwtService jwtService;
 
     @MockitoBean
-    protected VideoElasticSearchRepository searchRepository;
-    @MockitoBean
-    protected S3AsyncClient s3AsyncClient;
-    @MockitoBean
-    protected VideoS3StorageService storageService;
-    @MockitoBean
-    protected ThumbnailService thumbnailService;
+    protected S3Client s3Client;
     @MockitoBean
     protected RabbitTemplate rabbitTemplate;
 
+    @Autowired
+    protected VideoDailyViewsRepository dailyViewsRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        dailyViewsRepository.deleteAll();
         editorPickRepository.deleteAll();
         guideRepository.deleteAll();
         taskRepository.deleteAll();

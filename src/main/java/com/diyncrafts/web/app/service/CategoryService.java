@@ -1,5 +1,6 @@
 package com.diyncrafts.web.app.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,17 +17,25 @@ import com.diyncrafts.web.app.exceptions.ConflictException;
 import com.diyncrafts.web.app.exceptions.ResourceNotFoundException;
 import com.diyncrafts.web.app.model.Category;
 import com.diyncrafts.web.app.repository.jpa.CategoryRepository;
+import com.diyncrafts.web.app.repository.jpa.VideoDailyViewsRepository;
 import com.diyncrafts.web.app.repository.jpa.VideoRepository;
 
 @Service
 public class CategoryService {
 
+    static final int WINDOW_DAYS = 15;
+
     private final CategoryRepository categoryRepository;
     private final VideoRepository videoRepository;
+    private final VideoDailyViewsRepository dailyViewsRepository;
+    private final Clock clock;
 
-    public CategoryService(CategoryRepository categoryRepository, VideoRepository videoRepository) {
+    public CategoryService(CategoryRepository categoryRepository, VideoRepository videoRepository,
+            VideoDailyViewsRepository dailyViewsRepository, Clock clock) {
         this.categoryRepository = categoryRepository;
         this.videoRepository = videoRepository;
+        this.dailyViewsRepository = dailyViewsRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -74,22 +83,34 @@ public class CategoryService {
         return categoryRepository.findAll(Sort.by("name")).stream().map(CategoryResponse::from).toList();
     }
 
+    /**
+     * Lifetime views per category plus growth: views in the last {@value #WINDOW_DAYS} days (including
+     * today) compared with the {@value #WINDOW_DAYS} days before that, in percent. When the earlier
+     * window has no views, growth is 100 if there are recent views and 0 otherwise.
+     */
     @Transactional(readOnly = true)
     public List<CategoryStats> getCategoryStats() {
+        LocalDate today = LocalDate.now(clock);
+        LocalDate recentStart = today.minusDays(WINDOW_DAYS - 1);
+        LocalDate previousEnd = recentStart.minusDays(1);
+        LocalDate previousStart = previousEnd.minusDays(WINDOW_DAYS - 1);
         List<CategoryStats> stats = new ArrayList<>();
-        LocalDate now = LocalDate.now();
-        LocalDate lastWeek = now.minusDays(15);
-        LocalDate twoWeeksAgo = now.minusDays(30);
         for (Category category : categoryRepository.findAll(Sort.by("id"))) {
             Long categoryId = category.getId();
             long total = nullToZero(videoRepository.sumViewsByCategoryId(categoryId));
-            long recent = nullToZero(videoRepository.sumViewsBetweenDates(categoryId, lastWeek, now));
-            long previous = nullToZero(videoRepository.sumViewsBetweenDates(categoryId, twoWeeksAgo, lastWeek));
-            double growth = previous == 0 ? 100.0
-                    : Math.round(((double) (recent - previous) / previous) * 100 * 100.0) / 100.0;
-            stats.add(new CategoryStats(categoryId, total, growth));
+            long recent = dailyViewsRepository.sumViewsForCategory(categoryId, recentStart, today);
+            long previous = dailyViewsRepository.sumViewsForCategory(categoryId, previousStart, previousEnd);
+            stats.add(new CategoryStats(categoryId, total, growth(recent, previous)));
         }
         return stats;
+    }
+
+    static double growth(long recent, long previous) {
+        if (previous == 0) {
+            return recent > 0 ? 100.0 : 0.0;
+        }
+        double percent = ((double) (recent - previous) / previous) * 100;
+        return Math.round(percent * 100.0) / 100.0;
     }
 
     private static long nullToZero(Long value) {

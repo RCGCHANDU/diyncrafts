@@ -23,7 +23,8 @@ public class Video {
     @Column
     private String description;
 
-    @Column(nullable = false)
+    // Null until a thumbnail has been uploaded or generated.
+    @Column(length = 1024)
     private String thumbnailUrl;
 
     @Column(name = "upload_date", nullable = false)
@@ -35,7 +36,8 @@ public class Video {
     @Column
     private String difficultyLevel;
     
-    @Column(nullable = false)
+    // DASH manifest URL; null until transcoding has completed.
+    @Column(length = 1024)
     private String videoUrl;
 
     @ElementCollection

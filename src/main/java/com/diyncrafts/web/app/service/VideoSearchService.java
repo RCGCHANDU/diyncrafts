@@ -2,58 +2,30 @@ package com.diyncrafts.web.app.service;
 
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.stereotype.Service;
 
+import com.diyncrafts.web.app.dto.VideoSearchCriteria;
 import com.diyncrafts.web.app.dto.VideoSearchResponse;
 import com.diyncrafts.web.app.model.VideoElasticSearch;
-import com.diyncrafts.web.app.repository.es.VideoElasticSearchRepository;
+import com.diyncrafts.web.app.search.VideoSearchQueries;
 
 @Service
 public class VideoSearchService {
 
-    private final VideoElasticSearchRepository videoSearchRepository;
+    private final ElasticsearchOperations operations;
 
-    public VideoSearchService(VideoElasticSearchRepository videoSearchRepository) {
-        this.videoSearchRepository = videoSearchRepository;
+    public VideoSearchService(ElasticsearchOperations operations) {
+        this.operations = operations;
     }
 
-    public List<VideoSearchResponse> searchByTitle(String title) {
-        return map(videoSearchRepository.searchByTitleWildcard(title));
-    }
-
-    public List<VideoSearchResponse> searchByCategory(String categoryName) {
-        return map(videoSearchRepository.findByCategoryName(categoryName));
-    }
-
-    public List<VideoSearchResponse> searchByDifficulty(String difficultyLevel) {
-        return map(videoSearchRepository.findByDifficultyLevel(difficultyLevel));
-    }
-
-    public List<VideoSearchResponse> searchByUser(String userName) {
-        return map(videoSearchRepository.findByUserName(userName));
-    }
-
-    public List<VideoSearchResponse> searchByMaterial(String material) {
-        return map(videoSearchRepository.findByMaterialsUsedContains(material));
-    }
-
-    public List<VideoSearchResponse> searchByText(String searchText) {
-        if (searchText == null || searchText.isBlank()) {
-            return List.of();
-        }
-        return map(videoSearchRepository.searchByText(searchText));
-    }
-
-    public List<VideoSearchResponse> advancedSearch(String searchText, String category, String minDifficulty) {
-        return map(videoSearchRepository.advancedSearch(searchText, category, minDifficulty));
-    }
-
-    public List<VideoSearchResponse> searchWithFilters(String searchText, String category, String difficulty,
-            String material) {
-        return map(videoSearchRepository.advancedSearch(searchText, category, difficulty));
-    }
-
-    private static List<VideoSearchResponse> map(List<VideoElasticSearch> documents) {
-        return documents.stream().map(VideoSearchResponse::from).toList();
+    public List<VideoSearchResponse> search(VideoSearchCriteria criteria, Pageable pageable) {
+        return operations.search(VideoSearchQueries.build(criteria, pageable), VideoElasticSearch.class)
+                .getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .map(VideoSearchResponse::from)
+                .toList();
     }
 }

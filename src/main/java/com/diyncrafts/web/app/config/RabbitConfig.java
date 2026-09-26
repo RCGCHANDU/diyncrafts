@@ -13,9 +13,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitConfig {
 
+    public static final String TRANSCODING_QUEUE = "transcoding.queue";
+
     @Bean
     public Queue transcodingQueue() {
-        return new Queue("transcoding.queue", true);
+        return new Queue(TRANSCODING_QUEUE, true);
     }
 
     @Bean

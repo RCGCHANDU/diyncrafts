@@ -25,13 +25,14 @@ public class Guide {
 
     @ManyToOne
     @JoinColumn(name = "video_id", nullable = false)
-    private Video video; 
+    private Video video;
 
-    @OneToOne
+    // Many guides per author (was @OneToOne, which limited each user to a single guide).
+    @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "image_url", nullable = true)
+    @Column(name = "image_url", length = 1024)
     private String imageUrl;
 
     @OneToMany(mappedBy = "guide", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)

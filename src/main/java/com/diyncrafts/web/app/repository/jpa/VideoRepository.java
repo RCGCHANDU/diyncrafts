@@ -37,8 +37,4 @@ public interface VideoRepository extends JpaRepository<Video, Long> {
 
     @Query("SELECT SUM(v.viewCount) FROM Video v WHERE v.category.id = :categoryId")
     Long sumViewsByCategoryId(@Param("categoryId") Long categoryId);
-
-    @Query("SELECT SUM(v.viewCount) FROM Video v WHERE v.category.id = :categoryId AND v.uploadDate BETWEEN :start AND :end")
-    Long sumViewsBetweenDates(@Param("categoryId") Long categoryId, @Param("start") LocalDate start,
-            @Param("end") LocalDate end);
 }

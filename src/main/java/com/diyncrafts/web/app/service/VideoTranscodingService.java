@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +32,7 @@ public class VideoTranscodingService {
     private static final Logger logger = LoggerFactory.getLogger(VideoTranscodingService.class);
 
     @Autowired
-    private VideoS3StorageService storageService;
+    private com.diyncrafts.web.app.storage.ObjectStorageService storageService;
 
     @Autowired
     private TaskRepository taskRepository;
@@ -44,7 +43,7 @@ public class VideoTranscodingService {
     @Autowired
     private VideoRepository videoRepository;
 
-    @Value("${file.output.path}")
+    @Value("${app.transcoding.work-dir}")
     private String outputBasePath;
 
     // Constants for FFmpeg configuration
@@ -70,11 +69,11 @@ public class VideoTranscodingService {
         new StreamConfig(3, "1M", "2M", "4M")
     );
 
-    @RabbitListener(queues = "transcoding.queue")
+    @RabbitListener(queues = com.diyncrafts.web.app.config.RabbitConfig.TRANSCODING_QUEUE)
     @Transactional
-    public void processTask(Map<String, Object> message) {
-        String taskId = (String) message.get("taskId");
-        Long videoId = ((Number) message.get("videoId")).longValue();
+    public void processTask(com.diyncrafts.web.app.transcoding.TranscodingJob job) {
+        String taskId = job.taskId();
+        Long videoId = job.videoId();
         Task task = null;
         try {
             task = retrieveAndStartTask(taskId);
@@ -278,14 +277,19 @@ public class VideoTranscodingService {
             task.setStatus(TaskStatus.COMPLETED);
             task.setProgress(100.0);
             // Upload to S3
-            storageService.uploadToS3(outputDir, task.getTaskId());
+            try {
+                storageService.putDirectory(com.diyncrafts.web.app.storage.ObjectKeys.videoPrefix(task.getTaskId()),
+                        java.nio.file.Path.of(outputDir));
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
 
             Video video = videoRepository.findById(videoId).orElseThrow();
             
-            video.setVideoUrl(storageService.getPublicUrl(task.getTaskId()));
+            video.setVideoUrl(storageService.publicUrl(com.diyncrafts.web.app.storage.ObjectKeys.manifest(task.getTaskId())));
 
             // Update output location to S3 URL
-            task.setOutputLocation(storageService.getPublicUrl(task.getTaskId()));
+            task.setOutputLocation(storageService.publicUrl(com.diyncrafts.web.app.storage.ObjectKeys.manifest(task.getTaskId())));
         } else {
             task.setErrorDetails("FFmpeg exited with code " + exitCode);
             task.setStatus(TaskStatus.FAILED);
