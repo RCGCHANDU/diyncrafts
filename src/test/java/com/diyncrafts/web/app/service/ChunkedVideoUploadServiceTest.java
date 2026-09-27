@@ -2,6 +2,7 @@ package com.diyncrafts.web.app.service;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
@@ -45,6 +46,10 @@ class ChunkedVideoUploadServiceTest {
         when(videos.upload(any(), same(auth))).thenAnswer(invocation -> {
             com.diyncrafts.web.app.dto.VideoUploadRequest request = invocation.getArgument(0);
             assertArrayEquals("abcdef".getBytes(StandardCharsets.UTF_8), request.videoFile().getBytes());
+            Path moved = scratch.resolve("moved.webm");
+            request.videoFile().transferTo(moved);
+            assertEquals(6, request.videoFile().getSize());
+            assertArrayEquals("abcdef".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(moved));
             return null;
         });
 
