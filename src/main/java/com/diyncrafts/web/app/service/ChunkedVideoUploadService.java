@@ -73,8 +73,10 @@ public class ChunkedVideoUploadService {
                 throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Video is larger than 2 GB.");
             }
             try (InputStream input = chunk.getInputStream();
-                    OutputStream output = Files.newOutputStream(session.path,
-                            StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+                    OutputStream output = index == 0
+                            ? Files.newOutputStream(session.path, StandardOpenOption.CREATE_NEW,
+                                    StandardOpenOption.WRITE)
+                            : Files.newOutputStream(session.path, StandardOpenOption.APPEND)) {
                 long written = input.transferTo(output);
                 if (written != chunk.getSize()) throw new IOException("Incomplete upload chunk.");
                 session.bytes += written;
