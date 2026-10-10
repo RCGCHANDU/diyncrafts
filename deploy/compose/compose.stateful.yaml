@@ -47,7 +47,7 @@ services:
 
   rabbitmq:
     <<: *hardening
-    image: rabbitmq:4.3-management@sha256:ddc75301edf58a8332934cf2d801be7cbf8d65c6458d747364a8046238ff1c89
+    image: rabbitmq:4.3-management@sha256:8dd6e3570ddaa2ef82a6c3a8950e79c1f73893adfbdddbc374fc1f1ac8a0f5dd
     hostname: rabbitmq
     ports:
       # Management UI on the host's loopback only: ssh -L 15672:127.0.0.1:15672 <host>
